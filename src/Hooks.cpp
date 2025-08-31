@@ -10,6 +10,8 @@
 #include "rapidjson/filewritestream.h"
 #include "rapidjson/prettywriter.h"
 #include "MCP.h"
+#include "OARAPI.h"
+
 
 
 
@@ -203,9 +205,9 @@ void AnimationManager::ScanAnimationMods() {
         {"War Axes", 3.0, false, {}},
         {"Maces", 4.0, false, {}}, 
         {"Greatswords", 5.0, false, {}},
-        //{"Bows", 6.0, false, {}},
-        {"Battleaxes", 7.0, false, {}},
-        {"Warhammers", 8.0, false, {}},
+        //{"Bows", 7.0, false, {}},
+        {"Battleaxes", 6.0, false, {}},
+        {"Warhammers", 10.0, false, {}},
 
                                                           
         /*{"Alteration Spell", 12.0, false, {"MagicAlteration"}},
@@ -218,8 +220,8 @@ void AnimationManager::ScanAnimationMods() {
         {"Claws", 2.0, false, {"OCF_WeapTypeClaws1H","WeapTypeClaw"}},
         {"Pike", 5.0, false, {"OCF_WeapTypePike2H", "WeapTypePike"}},
         {"Twinblades", 5.0, false, {"OCF_WeapTypeTwinblade2H", "WeapTypePike"}},
-        {"Halberd", 7.0, false, {"OCF_WeapTypeHalberd2H", "WeapTypeHalberd"}},
-        {"Quarterstaff", 8.0, false, {"OCF_WeapTypeHalberd2H", "WeapTypeQtrStaff"}},
+        {"Halberd", 6.0, false, {"OCF_WeapTypeHalberd2H", "WeapTypeHalberd"}},
+        {"Quarterstaff", 10.0, false, {"OCF_WeapTypeHalberd2H", "WeapTypeQtrStaff"}},
         {"Rapier", 1.0, false, {"OCF_WeapTypeRapier1H", "WeapTypeRapier"}},
         {"Whip", 4.0, false, {"OCF_WeapTypeWhip1H", "WeapTypeWhip"}},
                                                            
@@ -791,6 +793,8 @@ void AnimationManager::DrawCategoryUI(WeaponCategory& category) {
 void AnimationManager::DrawAnimationManager() {
     if (ImGui::Button("Save configs")) {
         SaveAllSettings();
+        RecarregarAnimacoesOAR();
+  
     }
     ImGui::SameLine();
     ImGui::Checkbox("Preservar Condições Externas", &_preserveConditions);

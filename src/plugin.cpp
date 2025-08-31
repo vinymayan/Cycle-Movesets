@@ -3,18 +3,68 @@
 #include "Events.h"
 #include "Manager.h"
 #include "Serialization.h"
+#include "OARAPI.h"
 
 namespace fs = std::filesystem;
+
+// 2. Declare um ponteiro global para a interface da API.
+OAR_API::Animations::IAnimationsInterface* g_oarAPI = nullptr;
+
+// Função para solicitar e obter a interface da API do OAR
+// (Esta função é uma cópia da que existe no próprio OAR, para conveniência)
+void RequestOAR_API() {
+    // O nome do plugin deve ser exato e case-sensitive.
+    const auto pluginHandle = GetModuleHandleA("OpenAnimationReplacer.dll");
+    if (!pluginHandle) {
+        SKSE::log::warn("Não foi possível encontrar OpenAnimationReplacer.dll. A API não estará disponível.");
+        return;
+    }
+
+    // O nome da função exportada também deve ser exato.
+    const auto requestAPIFunction = reinterpret_cast<OAR_API::Animations::_RequestPluginAPI_Animations>(
+        GetProcAddress(pluginHandle, "RequestPluginAPI_Animations"));
+    if (!requestAPIFunction) {
+        SKSE::log::warn(
+            "Não foi possível encontrar a função 'RequestPluginAPI_Animations' no OpenAnimationReplacer.dll.");
+        return;
+    }
+
+    // Obtenha a declaração do seu próprio plugin para passar para a API.
+    const auto plugin = SKSE::PluginDeclaration::GetSingleton();
+    g_oarAPI = requestAPIFunction(OAR_API::Animations::InterfaceVersion::Latest, plugin->GetName().data(),
+                                  plugin->GetVersion());
+
+    if (g_oarAPI) {
+        SKSE::log::info("Interface da API do Open Animation Replacer obtida com sucesso.");
+    } else {
+        SKSE::log::warn("Falha ao obter a interface da API do Open Animation Replacer.");
+    }
+}
+
+// Esta é a função que você chamará em seu código quando quiser recarregar as animações.
+void RecarregarAnimacoesOAR() {
+    if (g_oarAPI) {
+        SKSE::log::info("[CycleMovesets] API do OAR encontrada. Tentando recarregar animações...");
+        g_oarAPI->ReloadAnimations();
+        SKSE::log::info("[CycleMovesets] Chamada para ReloadAnimations() enviada.");
+    } else {
+        SKSE::log::error(
+            "[CycleMovesets] ERRO: Tentativa de recarregar animações, mas a API do OAR é nula (nullptr). A API foi "
+            "obtida corretamente durante o kPostLoad?");
+    }
+}
+
 
 void OnMessage(SKSE::MessagingInterface::Message* message) {
     if (message->type == SKSE::MessagingInterface::kInputLoaded) {
     }
 
     if (message->type == SKSE::MessagingInterface::kDataLoaded) {
-        
+        RequestOAR_API();
     }
 
     if (message->type == SKSE::MessagingInterface::kNewGame || message->type == SKSE::MessagingInterface::kPostLoadGame) {
+        
         // 2. Requisitar um ClientID da API SkyPrompt
         auto* inputDeviceManager = RE::BSInputDeviceManager::GetSingleton();
         if (inputDeviceManager) {
