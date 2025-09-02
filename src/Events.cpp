@@ -11,11 +11,11 @@ constexpr const char* settings_path = "Data/SKSE/Plugins/CycleMovesets/CycleMove
 
 void __stdcall UI::Render() {
 
-    AnimationManager::GetSingleton().DrawMainMenu();  // Chamando a função com o nome correto
+    AnimationManager::GetSingleton()->DrawMainMenu();  // Chamando a função com o nome correto
 }
 void __stdcall DrawNPCMenus() {
 
-    AnimationManager::GetSingleton().DrawNPCMenu();  // Chamando a função com o nome correto
+    AnimationManager::GetSingleton()->DrawNPCMenu();  // Chamando a função com o nome correto
 }
 
 namespace MyMenu {

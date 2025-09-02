@@ -5,20 +5,12 @@
 #include "Events.h"
 #include "SKSEMCP/SKSEMenuFramework.hpp"
 #include "rapidjson/document.h"
-#include "rapidjson/error/en.h"
 #include "rapidjson/filereadstream.h"
 #include "rapidjson/filewritestream.h"
 #include "rapidjson/prettywriter.h"
 #include "MCP.h"
 #include "OARAPI.h"
 
-
-
-
-AnimationManager& AnimationManager::GetSingleton() {
-    static AnimationManager instance;
-    return instance;
-}
 
 // Função auxiliar para copiar um único arquivo com logs
 void CopySingleFile(const std::filesystem::path& sourceFile, const std::filesystem::path& destinationPath,

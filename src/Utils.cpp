@@ -12,7 +12,7 @@ constexpr uint32_t D_KEY = 0x20;
 
 // Esta função é chamada a cada frame de input
 RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_event,
-                                                     RE::BSTEventSource<RE::InputEvent*>* a_eventSource) {
+                                                     RE::BSTEventSource<RE::InputEvent*>*) {
     if (!a_event || !*a_event) {
         return RE::BSEventNotifyControl::kContinue;
     }
@@ -168,7 +168,7 @@ std::string GetActorWeaponCategoryName(RE::Actor* targetActor) {
         }
     }
 
-    const auto& allCategories = AnimationManager::GetSingleton().GetCategories();
+    const auto& allCategories = AnimationManager::GetSingleton()->GetCategories();
     auto weaponType = rightWeapon->GetWeaponType();
 
     for (const auto& pair : allCategories) {
@@ -282,7 +282,7 @@ void GlobalControl::StancesSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
         case SkyPromptAPI::kUp:
             except = false;
             SkyPromptAPI::RemovePrompt(StancesChangesSink::GetSingleton(), GlobalControl::g_clientID);
-            SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
+            if (SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID)){}
             if (!SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), GlobalControl::g_clientID)) {
                 logger::error("Skyprompt didnt worked Moveset Sink");
             }
@@ -395,7 +395,7 @@ void GlobalControl::MovesetChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent e
     // REQUERIMENTO 1, 2, 3: Pegar todas as informações necessárias
     std::string category = GetCurrentWeaponCategoryName();
     // O índice do cache é 0-3, mas a stance no jogo é 1-4.
-    int stanceIndex = static_cast<int>(GlobalControl::g_currentStance) - 1;
+    int stanceIndex = GlobalControl::g_currentStance - 1;
     int maxMovesets = AnimationManager::GetMaxMovesetsFor(category, stanceIndex);
 
     // Se não há movesets configurados para esta stance/arma, não faz nada.
@@ -468,8 +468,8 @@ RE::BSEventNotifyControl GlobalControl::ActionEventHandler::ProcessEvent(const S
     // REQUERIMENTO 1, 2, 3: Pegar todas as informações necessárias
     std::string category = GetCurrentWeaponCategoryName();
     // O índice do cache é 0-3, mas a stance no jogo é 1-4.
-    int stanceIndex = g_currentStance - 1;
-    int maxMovesets = AnimationManager::GetMaxMovesetsFor(category, stanceIndex);
+    [[maybe_unused]] int stanceIndex = g_currentStance - 1;
+    //int maxMovesets = AnimationManager::GetMaxMovesetsFor(category, stanceIndex);
 
     if (a_event && a_event->actor && a_event->actor->IsPlayerRef()) {
         // Jogador comeou a sacar a arma
@@ -505,14 +505,14 @@ RE::BSEventNotifyControl GlobalControl::ActionEventHandler::ProcessEvent(const S
 
 
 
-void GlobalControl::TriggerSmartRandomNumber(const std::string& eventSource) {
+void GlobalControl::TriggerSmartRandomNumber([[maybe_unused]] const std::string& eventSource) {
     auto player = RE::PlayerCharacter::GetSingleton();
     if (!player) {
         return;
     }
 
     std::string category = GetCurrentWeaponCategoryName();
-    int stanceIndex = static_cast<int>(g_currentStance) - 1;
+    int stanceIndex = g_currentStance - 1;
     int maxMovesets = AnimationManager::GetMaxMovesetsFor(category, stanceIndex);
 
     // Alterado para 2, pois com 2 ainda é possível alternar
@@ -571,14 +571,9 @@ bool GlobalControl::IsAnyMenuOpen() {
 }
 
 
-bool GlobalControl::IsThirdPerson() { 
-    auto playerCam = RE::PlayerCamera::GetSingleton()->IsInFirstPerson();
-    if (!playerCam) {
-        return true;
-
-    } else {
-        return false;    }
-     }
+bool GlobalControl::IsThirdPerson() {
+    return !RE::PlayerCamera::GetSingleton()->IsInFirstPerson();
+}
 
 RE::BSEventNotifyControl GlobalControl::MenuOpen::ProcessEvent(const RE::MenuOpenCloseEvent* event,
                                                                RE::BSTEventSource<RE::MenuOpenCloseEvent>*) {
@@ -589,16 +584,16 @@ RE::BSEventNotifyControl GlobalControl::MenuOpen::ProcessEvent(const RE::MenuOpe
     // REQUERIMENTO 1, 2, 3: Pegar todas as informações necessárias
     std::string category = GetCurrentWeaponCategoryName();
     // O índice do cache é 0-3, mas a stance no jogo é 1-4.
-    int stanceIndex = static_cast<int>(GlobalControl::g_currentStance) - 1;
-    int maxMovesets = AnimationManager::GetMaxMovesetsFor(category, stanceIndex);
-    if (!IsAnyMenuOpen && IsThirdPerson && g_isWeaponDrawn && !Cycleopen) {
+    int stanceIndex = GlobalControl::g_currentStance - 1;
+    [[maybe_unused]] int maxMovesets = AnimationManager::GetMaxMovesetsFor(category, stanceIndex);
+    if (!IsAnyMenuOpen() && IsThirdPerson() && g_isWeaponDrawn && !Cycleopen) {
         Cycleopen = true;
         UpdateSkyPromptTexts();
         logger::info("O valor de MovesetText é: {}", MovesetText);
         SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
         SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
     } 
-    if (IsAnyMenuOpen && IsThirdPerson) {
+    if (IsAnyMenuOpen() && IsThirdPerson()) {
         Cycleopen = false;
         UpdateSkyPromptTexts();
         SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
@@ -724,7 +719,7 @@ void GlobalControl::NPCrandomNumber(RE::Actor* targetActor, const std::string& e
     }
     std::string category = GetActorWeaponCategoryName(targetActor);
     int stanceIndex = 0;
-    int maxMovesets = AnimationManager::GetSingleton().GetMaxMovesetsForNPC(category, stanceIndex);
+    int maxMovesets = AnimationManager::GetSingleton()->GetMaxMovesetsForNPC(category, stanceIndex);
 
     // LOG ADICIONAL PARA DEBUG
     SKSE::log::info("NPCrandomNumber para o ator {:08X} (Categoria: '{}') encontrou maxMovesets = {}",
@@ -837,7 +832,7 @@ void GlobalControl::NpcCombatTracker::UnregisterSink(RE::Actor* a_actor) {
 }
 
 void GlobalControl::UpdateSkyPromptTexts() {
-    auto& animManager = AnimationManager::GetSingleton();
+    auto animManager = AnimationManager::GetSingleton();
     std::string category = GetCurrentWeaponCategoryName();
 
     // --- LÓGICA PARA STANCES (seu código atual está ótimo aqui) ---
@@ -845,24 +840,24 @@ void GlobalControl::UpdateSkyPromptTexts() {
     if (currentStanceIndex >= 0 && currentStanceIndex < 4) {
         int nextStanceIndex = (currentStanceIndex + 1) % 4;
         int backStanceIndex = (currentStanceIndex - 1 + 4) % 4;
-        StanceText = animManager.GetStanceName(category, currentStanceIndex);
-        StanceNextText = animManager.GetStanceName(category, nextStanceIndex);
-        StanceBackText = animManager.GetStanceName(category, backStanceIndex);
+        StanceText = animManager->GetStanceName(category, currentStanceIndex);
+        StanceNextText = animManager->GetStanceName(category, nextStanceIndex);
+        StanceBackText = animManager->GetStanceName(category, backStanceIndex);
     }
 
     // --- LÓGICA PARA MOVESETS (seu código atual está ótimo aqui) ---
-    int maxMovesets = animManager.GetMaxMovesetsFor(category, currentStanceIndex);
+    int maxMovesets = animManager->GetMaxMovesetsFor(category, currentStanceIndex);
     int currentMovesetIndex = g_currentMoveset;  // 1-N
     if (maxMovesets > 0) {
         std::string currentMovesetName =
-            animManager.GetCurrentMovesetName(category, currentStanceIndex, currentMovesetIndex);
+            animManager->GetCurrentMovesetName(category, currentStanceIndex, currentMovesetIndex);
         MovesetText = std::format("{} ({}/{})", currentMovesetName, currentMovesetIndex, maxMovesets);
 
         if (maxMovesets > 1) {
             int nextMovesetIndex = (currentMovesetIndex % maxMovesets) + 1;
             int backMovesetIndex = (currentMovesetIndex - 2 + maxMovesets) % maxMovesets + 1;
-            MovesetNextText = animManager.GetCurrentMovesetName(category, currentStanceIndex, nextMovesetIndex);
-            MovesetBackText = animManager.GetCurrentMovesetName(category, currentStanceIndex, backMovesetIndex);
+            MovesetNextText = animManager->GetCurrentMovesetName(category, currentStanceIndex, nextMovesetIndex);
+            MovesetBackText = animManager->GetCurrentMovesetName(category, currentStanceIndex, backMovesetIndex);
         } else {
             MovesetNextText = "";
             MovesetBackText = "";
