@@ -9,7 +9,7 @@ constexpr uint32_t W_KEY = 0x11;
 constexpr uint32_t A_KEY = 0x1E;
 constexpr uint32_t S_KEY = 0x1F;
 constexpr uint32_t D_KEY = 0x20;
-
+int GlobalControl::g_directionalState = 0;
 // Esta função é chamada a cada frame de input
 RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_event,
                                                      RE::BSTEventSource<RE::InputEvent*>*) {
@@ -107,9 +107,10 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
 
 // Esta função calcula o valor final da sua variável
 void InputListener::UpdateDirectionalState() {
-    static int DirecionalCycleMoveset = 0;
-    int VariavelAnterior = DirecionalCycleMoveset;
-
+    //static int DirecionalCycleMoveset = 0;
+    int VariavelAnterior = directionalState;
+    
+    
 
     // Prioriza o input do teclado. Se qualquer tecla WASD estiver pressionada, ignore o controle.
     // Caso contrário, use o estado do controle.
@@ -120,33 +121,41 @@ void InputListener::UpdateDirectionalState() {
 
     // A lógica de decisão permanece a mesma, mas agora usa as variáveis combinadas
     if (FRENTE && ESQUERDA) {
-        DirecionalCycleMoveset = 8;  // Noroeste
+        directionalState  = 8;  // Noroeste
     } else if (FRENTE && DIREITA) {
-        DirecionalCycleMoveset = 2;  // Nordeste
+        directionalState  = 2;  // Nordeste
     } else if (TRAS && ESQUERDA) {
-        DirecionalCycleMoveset = 6;  // Sudoeste
+        directionalState  = 6;  // Sudoeste
     } else if (TRAS && DIREITA) {
-        DirecionalCycleMoveset = 4;  // Sudeste
+        directionalState  = 4;  // Sudeste
     } else if (FRENTE) {
-        DirecionalCycleMoveset = 1;  // Norte (Frente)
+        directionalState  = 1;  // Norte (Frente)
     } else if (ESQUERDA) {
-        DirecionalCycleMoveset = 7;  // Oeste (Esquerda)
+        directionalState  = 7;  // Oeste (Esquerda)
     } else if (TRAS) {
-        DirecionalCycleMoveset = 5;  // Sul (Trás)
+        directionalState  = 5;  // Sul (Trás)
     } else if (DIREITA) {
-        DirecionalCycleMoveset = 3;  // Leste (Direita)
+        directionalState  = 3;  // Leste (Direita)
     } else {
-        DirecionalCycleMoveset = 0;  // Parado
+        directionalState  = 0;  // Parado
     }
 
     // Opcional: só imprime no log se o valor mudar, para não poluir o log.
-    if (VariavelAnterior != DirecionalCycleMoveset) {
-        SKSE::log::info("DirecionalCycleMoveset alterado para: {}", DirecionalCycleMoveset);
+    if (VariavelAnterior != directionalState ) {
+        SKSE::log::info("DirecionalCycleMoveset  alterado para: {}", directionalState );
+        GlobalControl::UpdateSkyPromptTexts();
         // Aqui você enviaria o valor para sua animação, por exemplo:
         // RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("MinhaVariavelDirecional",
-        // DirecionalCycleMoveset);
+        // directionalState );
+        if (GlobalControl::g_isWeaponDrawn) {
+            // Reenvia os prompts de moveset e stance para a API para forçar a atualização visual.
+            SkyPromptAPI::SendPrompt(GlobalControl::MovesetSink::GetSingleton(), GlobalControl::g_clientID);
+            SkyPromptAPI::SendPrompt(GlobalControl::StancesSink::GetSingleton(), GlobalControl::g_clientID);
+            SKSE::log::info("SkyPrompt reenviado devido à mudança de direção.");
+        }
     }
-    RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("DirecionalCycleMoveset", DirecionalCycleMoveset);
+    RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("DirecionalCycleMoveset", directionalState);
+
 }
 
 // NOVA FUNÇÃO AUXILIAR PARA QUALQUER ATOR
@@ -287,6 +296,12 @@ void GlobalControl::StancesSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
                 logger::error("Skyprompt didnt worked Moveset Sink");
             }
             break;        
+        case SkyPromptAPI::kTimeout:
+            if (SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID)){}
+            if (!SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), GlobalControl::g_clientID)) {
+                logger::error("Skyprompt didnt worked Moveset Sink");
+            }
+            break;        
         case SkyPromptAPI::kDeclined:
             StanceText = "Stance Menu";
             MovesetText = "Moveset Menu";
@@ -299,7 +314,8 @@ void GlobalControl::StancesSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
             if (!SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), GlobalControl::g_clientID)) {
                 logger::error("Skyprompt didnt worked Moveset Sink");
             }
-            break;        
+            break;   
+     
     }
 
 }
@@ -312,7 +328,11 @@ void GlobalControl::StancesChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent e
     if (event.type != SkyPromptAPI::PromptEventType::kAccepted) {
         return;
     }
-    
+    switch (event.type) {
+        case SkyPromptAPI::kTimeout:
+            SkyPromptAPI::SendPrompt(StancesChangesSink::GetSingleton(), g_clientID);
+            break;
+    }
     switch (event.prompt.eventID) {
         case 2:  // stance anterior
             g_currentStance -= 1;
@@ -404,7 +424,11 @@ void GlobalControl::MovesetChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent e
                                                                    0);  // Garante que nenhuma animação toque
         return;
     }
-
+    switch (event.type) {
+        case SkyPromptAPI::kTimeout:
+            SkyPromptAPI::SendPrompt(MovesetChangesSink::GetSingleton(), g_clientID);
+            break;
+    }
     switch (event.prompt.eventID) {
         case 2:  // Moveset anterior
             g_currentMoveset -= 1;
@@ -515,48 +539,42 @@ void GlobalControl::TriggerSmartRandomNumber([[maybe_unused]] const std::string&
     int stanceIndex = g_currentStance - 1;
     int maxMovesets = AnimationManager::GetMaxMovesetsFor(category, stanceIndex);
 
-    // Alterado para 2, pois com 2 ainda é possível alternar
-    if (maxMovesets < 2) {
+    if (maxMovesets <= 0) {  // Alterado para <= 0, pois 1 moveset não tem o que ciclar.
         return;
     }
 
-    // Lógica de geração "inteligente" simplificada
-    std::vector<int> availableMovesets;
-    for (int i = 1; i <= maxMovesets; ++i) {
-        // Ainda evita repetir os dois últimos movesets para manter a variedade
-        if (i != g_comboState.lastMoveset && i != g_comboState.previousMoveset) {
-            availableMovesets.push_back(i);
+    int nextMoveset = 1;
+
+    // --- INÍCIO DA NOVA LÓGICA ---
+    if (Settings::RandomCycle) {  // Se a nova checkbox "Random cycle" estiver ativa
+        if (maxMovesets > 1) {
+            // Nova lógica aleatória sem restrições
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            // Gera um número entre 1 e maxMovesets, garantindo que não seja o mesmo que o atual.
+            std::uniform_int_distribution<> distrib(1, maxMovesets);
+            do {
+                nextMoveset = distrib(gen);
+            } while (nextMoveset == g_currentMoveset);
+        }
+    } else {  // Se for o cycle moveset padrão (agora sequencial)
+        nextMoveset = g_currentMoveset + 1;
+        if (nextMoveset > maxMovesets) {
+            nextMoveset = 1;  // Volta para o primeiro
         }
     }
+    // --- FIM DA NOVA LÓGICA ---
 
-    // Se todos os movesets foram usados recentemente, reseta a lista para evitar ficar sem opções
-    if (availableMovesets.empty()) {
-        for (int i = 1; i <= maxMovesets; ++i) {
-            availableMovesets.push_back(i);
-        }
-    }
+    g_currentMoveset = nextMoveset;
+    player->SetGraphVariableInt("testarone", g_currentMoveset);
+    UpdateSkyPromptTexts();
 
-    if (!availableMovesets.empty()) {
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> distrib(0, static_cast<int>(availableMovesets.size() - 1));
+    // A lógica de comboState não é mais necessária para o modo sequencial ou o novo modo aleatório
+    // g_comboState.previousMoveset = g_comboState.lastMoveset;
+    // g_comboState.lastMoveset = nextMoveset;
 
-        // PONTO 1: O número gerado agora é diretamente um dos movesets disponíveis
-        int randomNumber = availableMovesets[distrib(gen)];
-        g_currentMoveset = randomNumber;
-        player->SetGraphVariableInt("testarone", g_currentMoveset);
-        UpdateSkyPromptTexts();
-        g_comboState.previousMoveset = g_comboState.lastMoveset;
-        g_comboState.lastMoveset = randomNumber;
-        if (g_isWeaponDrawn) {
-            SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
-        }
-        
-        
-
-        
-
-        //SKSE::log::info("{} (Player, {} movesets): Número gerado: {}", eventSource, maxMovesets, randomNumber);
+    if (g_isWeaponDrawn) {
+        SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
     }
 }
 
@@ -637,6 +655,7 @@ RE::BSEventNotifyControl GlobalControl::AnimationEventHandler::ProcessEvent(
             g_comboState.isTimerRunning = true;
             auto timeout_ms = std::chrono::milliseconds(static_cast<int>(Settings::CycleTimer * 1000));
             g_comboState.comboTimeoutTimestamp = std::chrono::steady_clock::now() + timeout_ms;
+            
 
         } else if (eventName == "weaponDraw" || eventName == "weaponSheathe") {
             g_comboState.isTimerRunning = false;  // Cancela qualquer combo pendente
@@ -849,15 +868,17 @@ void GlobalControl::UpdateSkyPromptTexts() {
     int maxMovesets = animManager->GetMaxMovesetsFor(category, currentStanceIndex);
     int currentMovesetIndex = g_currentMoveset;  // 1-N
     if (maxMovesets > 0) {
+        int dirState = InputListener::GetDirectionalState();
+        SKSE::log::info("[UpdateSkyPromptTexts] Chamando GetCurrentMovesetName com dirState: {}", dirState);
         std::string currentMovesetName =
-            animManager->GetCurrentMovesetName(category, currentStanceIndex, currentMovesetIndex);
+            animManager->GetCurrentMovesetName(category, currentStanceIndex, currentMovesetIndex, dirState);
         MovesetText = std::format("{} ({}/{})", currentMovesetName, currentMovesetIndex, maxMovesets);
 
         if (maxMovesets > 1) {
             int nextMovesetIndex = (currentMovesetIndex % maxMovesets) + 1;
             int backMovesetIndex = (currentMovesetIndex - 2 + maxMovesets) % maxMovesets + 1;
-            MovesetNextText = animManager->GetCurrentMovesetName(category, currentStanceIndex, nextMovesetIndex);
-            MovesetBackText = animManager->GetCurrentMovesetName(category, currentStanceIndex, backMovesetIndex);
+            MovesetNextText = animManager->GetCurrentMovesetName(category, currentStanceIndex, nextMovesetIndex,0);
+            MovesetBackText = animManager->GetCurrentMovesetName(category, currentStanceIndex, backMovesetIndex,0);
         } else {
             MovesetNextText = "";
             MovesetBackText = "";

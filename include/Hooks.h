@@ -26,6 +26,7 @@ namespace Settings {
 
     inline bool CycleMoveset = true;
     inline float CycleTimer = 1.4f;
+    inline bool RandomCycle = false;
 
     inline std::string SelectedLanguage = "English";
 }

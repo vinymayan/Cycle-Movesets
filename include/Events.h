@@ -19,7 +19,8 @@ public:
     const std::map<std::string, WeaponCategory>& GetCategories() const;
     std::string GetStanceName(const std::string& categoryName, int stanceIndex);
 
-    std::string GetCurrentMovesetName(const std::string& categoryName, int stanceIndex, int movesetIndex);
+    std::string GetCurrentMovesetName(const std::string& categoryName, int stanceIndex, int movesetIndex,
+                                      int directionalState);
     bool _showRestartPopup = false; 
 
 private:

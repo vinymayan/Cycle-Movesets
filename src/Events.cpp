@@ -41,7 +41,20 @@ namespace MyMenu {
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip(LOC("tooltip_auto_cycle"));
                 }
-
+                // --- NOVA CHECKBOX ADICIONADA AQUI ---
+                if (ImGui::Checkbox(
+                        "Random cycle",
+                        &Settings::RandomCycle)) {  // Supondo que você adicionará a tradução LOC("option_random_cycle")
+                    settings_changed = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(?)");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip(
+                        "When enabled, the automatic moveset cycle will be random instead of sequential. This mode has "
+                        "no minimum moveset requirement.");  // Supondo LOC("tooltip_random_cycle")
+                }
+                // --- FIM DA ADIÇÃO ---
                 ImGui::Spacing();
                 ImGui::SetNextItemWidth(200.0f);
                 // Opção e tooltip traduzidos
@@ -124,6 +137,7 @@ namespace MyMenu {
 
         // Adiciona as configurações gerais
         doc.AddMember("CycleMoveset", Settings::CycleMoveset, allocator);
+        doc.AddMember("RandomCycle", Settings::RandomCycle, allocator);
         doc.AddMember("CycleTimer", Settings::CycleTimer, allocator);
 
         // Cria o array de dispositivos
@@ -207,6 +221,9 @@ namespace MyMenu {
         // Carrega as configurações gerais
         if (doc.HasMember("CycleMoveset") && doc["CycleMoveset"].IsBool()) {
             Settings::CycleMoveset = doc["CycleMoveset"].GetBool();
+        }
+        if (doc.HasMember("RandomCycle") && doc["RandomCycle"].IsBool()) {  // <-- ADICIONADO
+            Settings::RandomCycle = doc["RandomCycle"].GetBool();
         }
         if (doc.HasMember("CycleTimer") && doc["CycleTimer"].IsFloat()) {
             Settings::CycleTimer = doc["CycleTimer"].GetFloat();

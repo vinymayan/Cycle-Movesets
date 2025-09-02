@@ -10,7 +10,7 @@
 #include "rapidjson/prettywriter.h"
 #include "MCP.h"
 #include "OARAPI.h"
-
+#include "Serialization.h"
 
 // Função auxiliar para copiar um único arquivo com logs
 void CopySingleFile(const std::filesystem::path& sourceFile, const std::filesystem::path& destinationPath,
@@ -148,6 +148,7 @@ void ScanSubAnimationFolderForTags(const std::filesystem::path& subAnimPath,
     subAnimDef.attackCount = 0;
     subAnimDef.powerAttackCount = 0;
     subAnimDef.hasIdle = false;
+    int hkxFileCount = 0;
 
    // Itera sobre todos os arquivos na pasta para encontrar tags de animação
     for (const auto& fileEntry : std::filesystem::directory_iterator(subAnimPath)) {
@@ -158,6 +159,7 @@ void ScanSubAnimationFolderForTags(const std::filesystem::path& subAnimPath,
 
             // A lógica de verificação de tags agora só é executada para arquivos .hkx
             if (extension == ".hkx") {
+                hkxFileCount++;
                 std::string filename = fileEntry.path().filename().string();
                 std::string lowerFilename = filename;
                 std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(), ::tolower);
@@ -174,6 +176,12 @@ void ScanSubAnimationFolderForTags(const std::filesystem::path& subAnimPath,
             }
         }
     }
+    // Se encontramos pelo menos um arquivo .hkx, marcamos a flag como verdadeira.
+    if (hkxFileCount > 0) {
+        subAnimDef.hasAnimations = true;
+    }
+    SKSE::log::info("Scan da pasta '{}': {} arquivos .hkx encontrados. hasAnimations = {}", subAnimDef.name,
+                    hkxFileCount, subAnimDef.hasAnimations);
 }
 
 // --- Lógica de Escaneamento (Carrega a Biblioteca) ---
@@ -759,23 +767,14 @@ void AnimationManager::DrawCategoryUI(WeaponCategory& category) {
                                     // Eles usam SameLine() para se alinharem horizontalmente DENTRO da
                                     // coluna.
                                     ImGui::Checkbox("F", &subInstance.pFront);
-                                    ImGui::SameLine();
                                     ImGui::Checkbox("B", &subInstance.pBack);
-                                    ImGui::SameLine();
                                     ImGui::Checkbox("L", &subInstance.pLeft);
-                                    ImGui::SameLine();
                                     ImGui::Checkbox("R", &subInstance.pRight);
-                                    ImGui::SameLine();
                                     ImGui::Checkbox("FR", &subInstance.pFrontRight);
-                                    ImGui::SameLine();
                                     ImGui::Checkbox("FL", &subInstance.pFrontLeft);
-                                    ImGui::SameLine();
                                     ImGui::Checkbox("BR", &subInstance.pBackRight);
-                                    ImGui::SameLine();
                                     ImGui::Checkbox("BL", &subInstance.pBackLeft);
-                                    ImGui::SameLine();
                                     ImGui::Checkbox("Rnd", &subInstance.pRandom);
-                                    ImGui::SameLine();
                                     ImGui::Checkbox("Movement", &subInstance.pDodge);
 
                                     ImGui::EndTable();
@@ -1531,7 +1530,14 @@ void AnimationManager::UpdateMaxMovesetCache() {
                 for (auto& subInst : modInst.subAnimationInstances) {
                     // Pula a sub-animação se ela estiver desmarcada.
                     if (!subInst.isSelected) continue;
-
+                    // --- INÍCIO DA NOVA VERIFICAÇÃO ---
+                    // Pega a definição original da sub-animação para verificar a flag
+                    const auto& sourceSubAnim =
+                        _allMods[subInst.sourceModIndex].subAnimations[subInst.sourceSubAnimIndex];
+                    if (!sourceSubAnim.hasAnimations) {
+                        continue;  // PULA este sub-moveset se ele não tiver animações .hkx
+                    }
+                    // --- FIM DA NOVA VERIFICAÇÃO ---
                     // A condição que define um "Pai" é a ausência de qualquer condição direcional.
                     // Esta lógica DEVE ser idêntica à usada na função SaveAllSettings para garantir consistência.
                     bool isParent = !(subInst.pFront || subInst.pBack || subInst.pLeft || subInst.pRight ||
@@ -2072,8 +2078,13 @@ std::string AnimationManager::GetStanceName(const std::string& categoryName, int
 }
 
 // Função para buscar o nome do moveset
-std::string AnimationManager::GetCurrentMovesetName(const std::string& categoryName, int stanceIndex,
-                                                    int movesetIndex) {
+std::string AnimationManager::GetCurrentMovesetName(const std::string& categoryName, int stanceIndex, int movesetIndex,
+                                                    int directionalState) {
+
+    // <--- LOG 1: Entrada da Função ---
+    SKSE::log::info("[GetCurrentMovesetName] Buscando: Cat='{}', Stance={}, MovesetIdx={}, DirState={}", categoryName,
+                    stanceIndex, movesetIndex, directionalState);
+
     if (movesetIndex <= 0) {
         return "Nenhum";
     }
@@ -2089,15 +2100,19 @@ std::string AnimationManager::GetCurrentMovesetName(const std::string& categoryN
     }
 
     CategoryInstance& instance = category.instances[stanceIndex];
+    // --- PASSO 1: Encontrar o nome do PAI (fallback) ---
+    std::string parentSubmovesetName = "Não encontrado";
     int parentCounter = 0;
-
-    // A lógica de iteração DEVE ser idêntica à de UpdateMaxMovesetCache e SaveAllSettings
     for (auto& modInst : instance.modInstances) {
         if (!modInst.isSelected) continue;
-
         for (auto& subInst : modInst.subAnimationInstances) {
             if (!subInst.isSelected) continue;
-
+            // --- INÍCIO DA NOVA VERIFICAÇÃO (idêntica à anterior) ---
+            const auto& sourceSubAnim = _allMods[subInst.sourceModIndex].subAnimations[subInst.sourceSubAnimIndex];
+            if (!sourceSubAnim.hasAnimations) {
+                continue;  // PULA este sub-moveset se ele não tiver animações .hkx
+            }
+            // --- FIM DA NOVA VERIFICAÇÃO ---
             bool isParent =
                 !(subInst.pFront || subInst.pBack || subInst.pLeft || subInst.pRight || subInst.pFrontRight ||
                   subInst.pFrontLeft || subInst.pBackRight || subInst.pBackLeft || subInst.pRandom || subInst.pDodge);
@@ -2105,15 +2120,58 @@ std::string AnimationManager::GetCurrentMovesetName(const std::string& categoryN
             if (isParent) {
                 parentCounter++;
                 if (parentCounter == movesetIndex) {
-                    // Encontramos! Retorna o nome do MOD PAI (o moveset).
-                    const auto& sourceMod = _allMods[modInst.sourceModIndex];
-                    return sourceMod.name;
+                    const auto& sourceSubAnimParent =
+                        _allMods[subInst.sourceModIndex].subAnimations[subInst.sourceSubAnimIndex];
+                    parentSubmovesetName = sourceSubAnimParent.name;
+                    SKSE::log::info("  -> Pai #{} encontrado: '{}'.", movesetIndex, parentSubmovesetName);
+                    goto found_parent;  // Pula para fora dos loops aninhados
                 }
             }
         }
     }
 
-    return "Não encontrado";  // Se o índice estiver fora do alcance
+found_parent:
+    // Se não encontrou o pai ou não há direção, retorna o que encontrou até agora.
+    if (parentSubmovesetName == "Não encontrado" || directionalState == 0) {
+        if (parentSubmovesetName == "Não encontrado") {
+            SKSE::log::warn("[GetCurrentMovesetName] Nenhum moveset encontrado para o índice {}", movesetIndex);
+        }
+        return parentSubmovesetName;
+    }
+
+    // --- PASSO 2: Procurar por um FILHO DIRECIONAL em TODOS os pacotes de moveset da stance ---
+    SKSE::log::info("  -> Procurando por filho direcional em todos os pacotes...");
+    for (auto& modInst : instance.modInstances) {
+        if (!modInst.isSelected) continue;
+        for (auto& childSubInst : modInst.subAnimationInstances) {
+            if (!childSubInst.isSelected) continue;
+
+            // Log de verificação (pode ser comentado depois de funcionar)
+            SKSE::log::info("    -- Verificando filho: '{}' [F:{}, B:{}, L:{}, R:{}, FR:{}, FL:{}, BR:{}, BL:{}]",
+                            _allMods[childSubInst.sourceModIndex].subAnimations[childSubInst.sourceSubAnimIndex].name,
+                            childSubInst.pFront, childSubInst.pBack, childSubInst.pLeft, childSubInst.pRight,
+                            childSubInst.pFrontRight, childSubInst.pFrontLeft, childSubInst.pBackRight,
+                            childSubInst.pBackLeft);
+
+            bool isDirectionalMatch =
+                (directionalState == 1 && childSubInst.pFront) || (directionalState == 2 && childSubInst.pFrontRight) ||
+                (directionalState == 3 && childSubInst.pRight) || (directionalState == 4 && childSubInst.pBackRight) ||
+                (directionalState == 5 && childSubInst.pBack) || (directionalState == 6 && childSubInst.pBackLeft) ||
+                (directionalState == 7 && childSubInst.pLeft) || (directionalState == 8 && childSubInst.pFrontLeft);
+
+            if (isDirectionalMatch) {
+                const auto& sourceSubAnimChild =
+                    _allMods[childSubInst.sourceModIndex].subAnimations[childSubInst.sourceSubAnimIndex];
+                SKSE::log::info("      ==> MATCH ENCONTRADO! Retornando nome do filho: {}", sourceSubAnimChild.name);
+                return sourceSubAnimChild.name;
+            }
+        }
+    }
+
+    // Se nenhum filho foi encontrado em nenhum pacote, retorna o nome do pai
+    SKSE::log::info("  -> Nenhum filho direcional correspondeu em nenhum pacote. Retornando nome do pai: {}",
+                    parentSubmovesetName);
+    return parentSubmovesetName;
 }
 
 // Adicione estas duas funções em Hooks.cpp

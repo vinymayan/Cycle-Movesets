@@ -19,7 +19,7 @@ namespace GlobalControl {
 
     inline int g_currentStance = 0;
     inline int g_currentMoveset = 0;
-
+    extern int g_directionalState; 
     // ID do nosso plugin com a API SkyPrompt
     inline SkyPromptAPI::ClientID g_clientID = 0;
     inline bool g_isWeaponDrawn = false;
