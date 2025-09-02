@@ -125,7 +125,7 @@ const char* LocalizationManager::T(const std::string& key) {
     }
 
     // Se não encontrar em lugar nenhum, loga um aviso e retorna a própria chave
-    SKSE::log::warn("Chave de localização não encontrada: '{}'", key);
+    //SKSE::log::warn("Chave de localização não encontrada: '{}'", key);
     _missingKeyBuffer[key] = key;  // Armazena a chave para que o ponteiro seja válido
     return _missingKeyBuffer[key].c_str();
 }

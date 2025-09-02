@@ -65,6 +65,16 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
 
     if (message->type == SKSE::MessagingInterface::kDataLoaded) {
         RequestOAR_API();
+
+        GlobalControl::g_clientID = SkyPromptAPI::RequestClientID();
+        if (GlobalControl::g_clientID > 0) {
+            SKSE::log::info("ClientID {} recebido da SkyPromptAPI.", GlobalControl::g_clientID);
+            if (!SkyPromptAPI::RequestTheme(GlobalControl::g_clientID, "Cycle Movesets")) {
+			    logger::error("Falha ao solicitar o tema 'Cycle Movesets' na SkyPromptAPI.");
+            }
+        } else {
+            SKSE::log::error("Falha ao obter um ClientID da SkyPromptAPI. A API esta instalada?");
+        }
     }
 
     if (message->type == SKSE::MessagingInterface::kNewGame || message->type == SKSE::MessagingInterface::kPostLoadGame) {
@@ -95,25 +105,6 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
             logger::info("Adding event sink for dialogue menu auto zoom.");
             ui->AddEventSink<RE::MenuOpenCloseEvent>(GlobalControl::MenuOpen::GetSingleton());
         }
-
-        GlobalControl::g_clientID = SkyPromptAPI::RequestClientID();
-        if (GlobalControl::g_clientID > 0) {
-            SKSE::log::info("ClientID {} recebido da SkyPromptAPI.", GlobalControl::g_clientID);
-            SkyPromptAPI::RequestTheme(GlobalControl::g_clientID, "Cycle Movesets");
-            // 3. Enviar nossos prompts para a API começar a monitorar as teclas
-            if (SkyPromptAPI::SendPrompt(GlobalControl::StancesSink::GetSingleton(), GlobalControl::g_clientID)) {
-                SKSE::log::info("Prompts de tecla registrados com sucesso!");
-            } else {
-                SKSE::log::error("Falha ao registrar os prompts de tecla na SkyPromptAPI.");
-            }
-            if (SkyPromptAPI::SendPrompt(GlobalControl::MovesetSink::GetSingleton(), GlobalControl::g_clientID)) {
-                SKSE::log::info("Prompts de tecla registrados com sucesso!");
-            } else {
-                SKSE::log::error("Falha ao registrar os prompts de tecla na SkyPromptAPI.");
-            }
-        } else {
-            SKSE::log::error("Falha ao obter um ClientID da SkyPromptAPI. A API esta instalada?");
-        }
     }
 }
 
@@ -121,6 +112,7 @@ SKSEPluginLoad(const SKSE::LoadInterface *skse) {
 
     SetupLog();
     logger::info("Plugin loaded");
+    AnimationManager::GetSingleton()->ScanAnimationMods();
     SKSE::Init(skse);
     SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
     
@@ -132,7 +124,6 @@ SKSEPluginLoad(const SKSE::LoadInterface *skse) {
     }
 
      // 1. Escaneia os arquivos de animação para carregar os dados.
-    AnimationManager::GetSingleton().ScanAnimationMods();
 
     // 2. ALTERAÇÃO AQUI: Chame a função para registrar o menu no framework.
     UI::RegisterMenu();

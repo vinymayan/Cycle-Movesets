@@ -5,13 +5,12 @@
 #include "Settings.h"  // Inclui as novas definições
 #include "rapidjson/document.h"
 #include "rapidjson/prettywriter.h"
-#include "rapidjson/stringbuffer.h"
+#include "ClibUtil/singleton.hpp"
 
 struct FileSaveConfig;
 
-class AnimationManager {
+class AnimationManager : public clib_util::singleton::ISingleton<AnimationManager> {
 public:
-    static AnimationManager& GetSingleton();
     void ScanAnimationMods();
     void DrawMainMenu();
     void DrawNPCMenu();
