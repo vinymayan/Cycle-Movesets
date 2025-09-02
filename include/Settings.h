@@ -56,6 +56,11 @@ struct WeaponCategory {
     bool isDualWield = false;
     std::vector<std::string> keywords;
     std::array<CategoryInstance, 4> instances;
+    // --- NOVO ---
+    // Armazena os nomes customizados das stances
+    std::array<std::string, 4> stanceNames;
+    // Buffer para edição no ImGui (evita problemas com std::string)
+    std::array<std::array<char, 64>, 4> stanceNameBuffers;
 };
 
 struct UserMoveset {

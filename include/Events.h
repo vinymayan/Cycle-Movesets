@@ -18,6 +18,10 @@ public:
     static int GetMaxMovesetsFor(const std::string& category, int stanceIndex);
     static int GetMaxMovesetsForNPC(const std::string& category, int stanceIndex);
     const std::map<std::string, WeaponCategory>& GetCategories() const;
+    std::string GetStanceName(const std::string& categoryName, int stanceIndex);
+
+    std::string GetCurrentMovesetName(const std::string& categoryName, int stanceIndex, int movesetIndex);
+    bool _showRestartPopup = false; 
 
 private:
     std::map<std::string, WeaponCategory> _categories;
@@ -58,6 +62,16 @@ private:
                                        bool isLeftHand, rapidjson::Document::AllocatorType& allocator);
     void AddKeywordOrConditions(rapidjson::Value& parentArray, const std::vector<std::string>& keywords,
                                 bool isLeftHand, rapidjson::Document::AllocatorType& allocator);
+
+
+
+    void SaveStanceNames();
+
+    void LoadStanceNames();
+
+    void DrawStanceEditorPopup();
+
+    void DrawRestartPopup();
 
     // --- NOVAS VARIÁVEIS PARA GERENCIAR MOVESETS DO USUÁRIO ---
 
@@ -116,6 +130,11 @@ private:
 
     // NOVA FUNÇÃO PRIVADA: Usada internamente para preencher o cache.
     void UpdateMaxMovesetCache();
+
+    bool _isEditStanceModalOpen = false;
+    WeaponCategory* _categoryToEdit = nullptr;
+    int _stanceIndexToEdit = -1;
+    char _editStanceNameBuffer[64] = "";
 };
 
 struct FileSaveConfig {

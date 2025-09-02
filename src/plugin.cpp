@@ -42,15 +42,19 @@ void RequestOAR_API() {
 }
 
 // Esta é a função que você chamará em seu código quando quiser recarregar as animações.
-void RecarregarAnimacoesOAR() {
+bool RecarregarAnimacoesOAR() {
     if (g_oarAPI) {
         SKSE::log::info("[CycleMovesets] API do OAR encontrada. Tentando recarregar animações...");
         g_oarAPI->ReloadAnimations();
         SKSE::log::info("[CycleMovesets] Chamada para ReloadAnimations() enviada.");
-    } else {
-        SKSE::log::error(
-            "[CycleMovesets] ERRO: Tentativa de recarregar animações, mas a API do OAR é nula (nullptr). A API foi "
-            "obtida corretamente durante o kPostLoad?");
+        return true;  // <-- ALTERAÇÃO: Informa que a chamada foi bem-sucedida
+        
+    }
+    else {
+       SKSE::log::error(
+        "[CycleMovesets] ERRO: Tentativa de recarregar animações, mas a API do OAR é nula (nullptr).");
+        return false;  // <-- ALTERAÇÃO: Informa que a chamada falhou
+
     }
 }
 

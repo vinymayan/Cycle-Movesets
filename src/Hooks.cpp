@@ -249,7 +249,17 @@ void AnimationManager::ScanAnimationMods() {
         _categories[def.name].equippedTypeValue = def.typeValue;
         _categories[def.name].isDualWield = def.isDual;
         _categories[def.name].keywords = def.keywords;
+
+        // --- NOVO: Inicializa os nomes e buffers das stances ---
+        for (int i = 0; i < 4; ++i) {
+            std::string defaultName = std::format("Stance {}", i + 1);
+            _categories[def.name].stanceNames[i] = defaultName;
+            strcpy_s(_categories[def.name].stanceNameBuffers[i].data(),
+                     _categories[def.name].stanceNameBuffers[i].size(), defaultName.c_str());
+        }
     }
+    LoadStanceNames();
+
 
     if (!std::filesystem::exists(oarRootPath)) return;
     for (const auto& entry : std::filesystem::directory_iterator(oarRootPath)) {
@@ -354,7 +364,7 @@ void AnimationManager::DrawAddModModal() {
     if (ImGui::BeginPopupModal(LOC("add_moveset"), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("Biblioteca de Movesets");
         ImGui::Separator();
-        ImGui::InputText("Filtrar", _movesetFilter, 128);
+        ImGui::InputText("Filter", _movesetFilter, 128);
         if (ImGui::BeginChild("BibliotecaMovesets", ImVec2(modal_list_size), true)) {
             std::string filter_str = _movesetFilter;
             std::transform(filter_str.begin(), filter_str.end(), filter_str.begin(), ::tolower);
@@ -394,7 +404,7 @@ void AnimationManager::DrawAddModModal() {
     if (ImGui::BeginPopupModal(LOC("add_animation"), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("Biblioteca de Animações");
         ImGui::Separator();
-        ImGui::InputText("Filtrar", _subMovesetFilter, 128);
+        ImGui::InputText("Filter", _subMovesetFilter, 128);
 
         if (ImGui::BeginChild("BibliotecaSubMovesets", ImVec2(modal_list_size), true)) {
             std::string filter_str = _subMovesetFilter;
@@ -498,11 +508,14 @@ void AnimationManager::DrawMainMenu() {
     // Ele só será desenhado quando a flag _isAddModModalOpen for verdadeira,
     // mas agora ele não pertence a nenhuma aba específica.
     DrawAddModModal();
+    DrawStanceEditorPopup();
+    DrawRestartPopup();
 }
 
 void AnimationManager::DrawNPCMenu() { 
     DrawNPCManager();
     DrawAddModModal();
+    DrawRestartPopup();
 }
 
 int AnimationManager::GetMaxMovesetsFor(const std::string& category, int stanceIndex) { 
@@ -540,9 +553,16 @@ const std::map<std::string, WeaponCategory>& AnimationManager::GetCategories() c
 void AnimationManager::DrawCategoryUI(WeaponCategory& category) {
     ImGui::PushID(category.name.c_str());
     if (ImGui::CollapsingHeader(category.name.c_str())) {
+        ImGui::BeginGroup(); 
         if (ImGui::BeginTabBar(std::string("StanceTabs_" + category.name).c_str())) {
             for (int i = 0; i < 4; ++i) {
-                if (ImGui::BeginTabItem(std::format("Stance {}", i + 1).c_str())) {
+                // Pega o nome atual da stance
+                const char* currentStanceName = category.stanceNameBuffers[i].data();
+
+                // Desenha a aba apenas com o nome
+                bool tab_open = ImGui::BeginTabItem(currentStanceName);
+             
+                if (tab_open) {
                     category.activeInstanceIndex = i;
                     CategoryInstance& instance = category.instances[i];
 
@@ -572,7 +592,15 @@ void AnimationManager::DrawCategoryUI(WeaponCategory& category) {
                             }
                         }
                     }
+                    if (ImGui::Button(LOC("edit_stance_name"))) {
+                        _isEditStanceModalOpen = true;
+                        _categoryToEdit = &category;
+                        _stanceIndexToEdit = i;
+                        strcpy_s(_editStanceNameBuffer, sizeof(_editStanceNameBuffer), currentStanceName);
+                    }
 
+                    // 2. Colocamos o botão "Adicionar Moveset" na mesma linha para criar uma barra de ações.
+                    ImGui::SameLine();
                     // Botões de ação para a instância
                     if (ImGui::Button(LOC("add_moveset"))) {
                         _isAddModModalOpen = true;
@@ -786,18 +814,18 @@ void AnimationManager::DrawCategoryUI(WeaponCategory& category) {
             }
             ImGui::EndTabBar();
         }
+        ImGui::EndGroup();
     }
     ImGui::PopID();
 }
 
 void AnimationManager::DrawAnimationManager() {
-    if (ImGui::Button("Save configs")) {
+    if (ImGui::Button(LOC("save"))) {
         SaveAllSettings();
-        RecarregarAnimacoesOAR();
   
     }
     ImGui::SameLine();
-    ImGui::Checkbox("Preservar Condições Externas", &_preserveConditions);
+    ImGui::Checkbox(LOC("save_oldconditions"), &_preserveConditions);
     ImGui::Separator();
 
     // DrawAddModModal();
@@ -831,7 +859,7 @@ void AnimationManager::DrawAnimationManager() {
 
 }
 void AnimationManager::DrawNPCManager() {
-    if (ImGui::Button("Save configs")) {
+    if (ImGui::Button(LOC("save"))) {
         SaveAllSettings();  // Chama a nova função de salvamento específica para NPCs
     }
     ImGui::Separator();
@@ -1011,6 +1039,7 @@ void AnimationManager::DrawNPCCategoryUI(WeaponCategory& category) {
 
 void AnimationManager::SaveAllSettings() {
     SKSE::log::info("Iniciando salvamento global de todas as configurações...");
+    SaveStanceNames();
     SaveCycleMovesets();
     SKSE::log::info("Gerando arquivos de condição para OAR...");
     std::map<std::filesystem::path, std::vector<FileSaveConfig>> fileUpdates;
@@ -1139,6 +1168,9 @@ void AnimationManager::SaveAllSettings() {
     SKSE::log::info("Salvamento global concluído.");
     RE::DebugNotification("Todas as configurações foram salvas!");
     UpdateMaxMovesetCache();
+
+    RecarregarAnimacoesOAR();
+    _showRestartPopup = true;
 }
 
 void AnimationManager::UpdateOrCreateJson(const std::filesystem::path& jsonPath,
@@ -1403,12 +1435,12 @@ void AnimationManager::AddCompareValuesCondition(rapidjson::Value& conditionsArr
     newCompare.AddMember("condition", "CompareValues", allocator);
     newCompare.AddMember("requiredVersion", "1.0.0.0", allocator);
     rapidjson::Value valueA(rapidjson::kObjectType);
-    valueA.AddMember("value", static_cast<double>(value), allocator);  // Garante que o valor é float/double no JSON
+    valueA.AddMember("value", value, allocator);  
     newCompare.AddMember("Value A", valueA, allocator);
     newCompare.AddMember("Comparison", "==", allocator);
     rapidjson::Value valueB(rapidjson::kObjectType);
     valueB.AddMember("graphVariable", rapidjson::Value(graphVarName.c_str(), allocator), allocator);
-    valueB.AddMember("graphVariableType", "Float", allocator);
+    valueB.AddMember("graphVariableType", "Int", allocator);
     newCompare.AddMember("Value B", valueB, allocator);
     conditionsArray.PushBack(newCompare, allocator);
 }
@@ -1569,12 +1601,12 @@ void AnimationManager::AddNegatedCompareValuesCondition(rapidjson::Value& condit
 
     newCompare.AddMember("requiredVersion", "1.0.0.0", allocator);
     rapidjson::Value valueA(rapidjson::kObjectType);
-    valueA.AddMember("value", static_cast<double>(value), allocator);
+    valueA.AddMember("value", value, allocator);
     newCompare.AddMember("Value A", valueA, allocator);
     newCompare.AddMember("Comparison", "==", allocator);
     rapidjson::Value valueB(rapidjson::kObjectType);
     valueB.AddMember("graphVariable", rapidjson::Value(graphVarName.c_str(), allocator), allocator);
-    valueB.AddMember("graphVariableType", "Float", allocator);
+    valueB.AddMember("graphVariableType", "Int", allocator);
     newCompare.AddMember("Value B", valueB, allocator);
     conditionsArray.PushBack(newCompare, allocator);
 }
@@ -2031,4 +2063,205 @@ void AnimationManager::AddKeywordOrConditions(rapidjson::Value& parentArray, con
 
     orBlock.AddMember("Conditions", innerOrConditions, allocator);
     parentArray.PushBack(orBlock, allocator);
+}
+
+// Adicione estas novas funções em Hooks.cpp
+
+// Função para buscar o nome da stance
+std::string AnimationManager::GetStanceName(const std::string& categoryName, int stanceIndex) {
+    if (stanceIndex < 0 || stanceIndex >= 4) {
+        return "Stance Inválida";
+    }
+    auto it = _categories.find(categoryName);
+    if (it != _categories.end()) {
+        return it->second.stanceNames[stanceIndex];
+    }
+    return std::to_string(stanceIndex + 1);  // Fallback
+}
+
+// Função para buscar o nome do moveset
+std::string AnimationManager::GetCurrentMovesetName(const std::string& categoryName, int stanceIndex,
+                                                    int movesetIndex) {
+    if (movesetIndex <= 0) {
+        return "Nenhum";
+    }
+
+    auto it = _categories.find(categoryName);
+    if (it == _categories.end()) {
+        return "Categoria não encontrada";
+    }
+
+    WeaponCategory& category = it->second;
+    if (stanceIndex < 0 || stanceIndex >= 4) {
+        return "Stance inválida";
+    }
+
+    CategoryInstance& instance = category.instances[stanceIndex];
+    int parentCounter = 0;
+
+    // A lógica de iteração DEVE ser idêntica à de UpdateMaxMovesetCache e SaveAllSettings
+    for (auto& modInst : instance.modInstances) {
+        if (!modInst.isSelected) continue;
+
+        for (auto& subInst : modInst.subAnimationInstances) {
+            if (!subInst.isSelected) continue;
+
+            bool isParent =
+                !(subInst.pFront || subInst.pBack || subInst.pLeft || subInst.pRight || subInst.pFrontRight ||
+                  subInst.pFrontLeft || subInst.pBackRight || subInst.pBackLeft || subInst.pRandom || subInst.pDodge);
+
+            if (isParent) {
+                parentCounter++;
+                if (parentCounter == movesetIndex) {
+                    // Encontramos! Retorna o nome do MOD PAI (o moveset).
+                    const auto& sourceMod = _allMods[modInst.sourceModIndex];
+                    return sourceMod.name;
+                }
+            }
+        }
+    }
+
+    return "Não encontrado";  // Se o índice estiver fora do alcance
+}
+
+// Adicione estas duas funções em Hooks.cpp
+
+void AnimationManager::SaveStanceNames() {
+    SKSE::log::info("Salvando nomes das stances...");
+    const std::filesystem::path savePath = "Data/SKSE/Plugins/CycleMovesets/StanceNames.json";
+
+    rapidjson::Document doc;
+    doc.SetObject();
+    auto& allocator = doc.GetAllocator();
+
+    for (const auto& pair : _categories) {
+        const WeaponCategory& category = pair.second;
+        rapidjson::Value stanceNamesArray(rapidjson::kArrayType);
+        for (const auto& name : category.stanceNames) {
+            stanceNamesArray.PushBack(rapidjson::Value(name.c_str(), allocator), allocator);
+        }
+        doc.AddMember(rapidjson::Value(category.name.c_str(), allocator), stanceNamesArray, allocator);
+    }
+
+    // Escreve o arquivo
+    std::ofstream ofs(savePath);
+    if (!ofs) {
+        SKSE::log::error("Falha ao abrir {} para escrita!", savePath.string());
+        return;
+    }
+    rapidjson::StringBuffer buffer;
+    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
+    doc.Accept(writer);
+    ofs << buffer.GetString();
+    ofs.close();
+    SKSE::log::info("Nomes das stances salvos com sucesso.");
+}
+
+void AnimationManager::LoadStanceNames() {
+    SKSE::log::info("Carregando nomes das stances...");
+    const std::filesystem::path loadPath = "Data/SKSE/Plugins/CycleMovesets/StanceNames.json";
+
+    if (!std::filesystem::exists(loadPath)) {
+        SKSE::log::info("Arquivo de nomes de stance não encontrado. Usando padrões.");
+        return;
+    }
+
+    std::ifstream ifs(loadPath);
+    if (!ifs) {
+        SKSE::log::error("Falha ao abrir {} para leitura!", loadPath.string());
+        return;
+    }
+
+    std::string jsonContent((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    ifs.close();
+
+    rapidjson::Document doc;
+    doc.Parse(jsonContent.c_str());
+
+    if (doc.HasParseError() || !doc.IsObject()) {
+        SKSE::log::error("Erro no parse do JSON de nomes de stance.");
+        return;
+    }
+
+    for (auto& pair : _categories) {
+        WeaponCategory& category = pair.second;
+        if (doc.HasMember(category.name.c_str()) && doc[category.name.c_str()].IsArray()) {
+            const auto& stanceNamesArray = doc[category.name.c_str()].GetArray();
+            for (rapidjson::SizeType i = 0; i < stanceNamesArray.Size() && i < 4; ++i) {
+                if (stanceNamesArray[i].IsString()) {
+                    category.stanceNames[i] = stanceNamesArray[i].GetString();
+                    // Atualiza o buffer do ImGui também
+                    strcpy_s(category.stanceNameBuffers[i].data(), category.stanceNameBuffers[i].size(),
+                             category.stanceNames[i].c_str());
+                }
+            }
+        }
+    }
+    SKSE::log::info("Nomes de stance carregados com sucesso.");
+}
+
+void AnimationManager::DrawStanceEditorPopup() {
+    if (_isEditStanceModalOpen) {
+        ImGui::OpenPopup(LOC("edit_stance_name_popup"));
+        _isEditStanceModalOpen = false;  // Reseta o gatilho
+    }
+
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImVec2 center = ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f, viewport->Pos.y + viewport->Size.y * 0.5f);
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal(LOC("edit_stance_name_popup"), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text(LOC("enter_new_stance_name"));
+        ImGui::Separator();
+
+        ImGui::PushItemWidth(300);
+        ImGui::InputText("##NewStanceName", _editStanceNameBuffer, sizeof(_editStanceNameBuffer));
+        ImGui::PopItemWidth();
+
+        if (ImGui::Button(LOC("save"), ImVec2(120, 0))) {
+            if (_categoryToEdit && _stanceIndexToEdit != -1) {
+                // Salva o nome do buffer temporário para a estrutura de dados real
+                _categoryToEdit->stanceNames[_stanceIndexToEdit] = _editStanceNameBuffer;
+                // E também para o buffer que a Tab usa, para atualização visual instantânea
+                strcpy_s(_categoryToEdit->stanceNameBuffers[_stanceIndexToEdit].data(),
+                         _categoryToEdit->stanceNameBuffers[_stanceIndexToEdit].size(), _editStanceNameBuffer);
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(LOC("cancel"), ImVec2(120, 0))) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+void AnimationManager::DrawRestartPopup() {
+    // Se a flag for verdadeira, nós dizemos ao ImGui para abrir o popup na próxima frame
+    if (_showRestartPopup) {
+        ImGui::OpenPopup("Restart Required");
+        _showRestartPopup = false;  // Reseta a flag para não abrir toda hora
+    }
+
+    // Configura a posição central do popup
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImVec2 center = ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f, viewport->Pos.y + viewport->Size.y * 0.5f);
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    // Define o conteúdo do popup
+    if (ImGui::BeginPopupModal("Restart Required", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Configs saved, reload the game to take effect.");
+        ImGui::Separator();
+
+        // Centraliza o botão OK
+        float window_width = ImGui::GetWindowWidth();
+        float button_width = 120.0f;
+        ImGui::SetCursorPosX((window_width - button_width) * 0.5f);
+
+        if (ImGui::Button("OK", ImVec2(button_width, 0))) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
 }

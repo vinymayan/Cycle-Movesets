@@ -8,4 +8,4 @@ extern OAR_API::Animations::IAnimationsInterface* g_oarAPI;
 
 // 2. Declare a sua função helper também.
 // Assim, qualquer arquivo que inclua este header saberá que a função existe.
-void RecarregarAnimacoesOAR();
+bool RecarregarAnimacoesOAR();

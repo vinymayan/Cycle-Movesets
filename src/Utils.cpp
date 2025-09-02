@@ -107,8 +107,8 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
 
 // Esta função calcula o valor final da sua variável
 void InputListener::UpdateDirectionalState() {
-    static float DirecionalCycleMoveset = 0.0f;
-    float VariavelAnterior = DirecionalCycleMoveset;
+    static int DirecionalCycleMoveset = 0;
+    int VariavelAnterior = DirecionalCycleMoveset;
 
 
     // Prioriza o input do teclado. Se qualquer tecla WASD estiver pressionada, ignore o controle.
@@ -120,33 +120,33 @@ void InputListener::UpdateDirectionalState() {
 
     // A lógica de decisão permanece a mesma, mas agora usa as variáveis combinadas
     if (FRENTE && ESQUERDA) {
-        DirecionalCycleMoveset = 8.0f;  // Noroeste
+        DirecionalCycleMoveset = 8;  // Noroeste
     } else if (FRENTE && DIREITA) {
-        DirecionalCycleMoveset = 2.0f;  // Nordeste
+        DirecionalCycleMoveset = 2;  // Nordeste
     } else if (TRAS && ESQUERDA) {
-        DirecionalCycleMoveset = 6.0f;  // Sudoeste
+        DirecionalCycleMoveset = 6;  // Sudoeste
     } else if (TRAS && DIREITA) {
-        DirecionalCycleMoveset = 4.0f;  // Sudeste
+        DirecionalCycleMoveset = 4;  // Sudeste
     } else if (FRENTE) {
-        DirecionalCycleMoveset = 1.0f;  // Norte (Frente)
+        DirecionalCycleMoveset = 1;  // Norte (Frente)
     } else if (ESQUERDA) {
-        DirecionalCycleMoveset = 7.0f;  // Oeste (Esquerda)
+        DirecionalCycleMoveset = 7;  // Oeste (Esquerda)
     } else if (TRAS) {
-        DirecionalCycleMoveset = 5.0f;  // Sul (Trás)
+        DirecionalCycleMoveset = 5;  // Sul (Trás)
     } else if (DIREITA) {
-        DirecionalCycleMoveset = 3.0f;  // Leste (Direita)
+        DirecionalCycleMoveset = 3;  // Leste (Direita)
     } else {
-        DirecionalCycleMoveset = 0.0f;  // Parado
+        DirecionalCycleMoveset = 0;  // Parado
     }
 
     // Opcional: só imprime no log se o valor mudar, para não poluir o log.
     if (VariavelAnterior != DirecionalCycleMoveset) {
         SKSE::log::info("DirecionalCycleMoveset alterado para: {}", DirecionalCycleMoveset);
         // Aqui você enviaria o valor para sua animação, por exemplo:
-        // RE::PlayerCharacter::GetSingleton()->SetGraphVariableFloat("MinhaVariavelDirecional",
+        // RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("MinhaVariavelDirecional",
         // DirecionalCycleMoveset);
     }
-    RE::PlayerCharacter::GetSingleton()->SetGraphVariableFloat("DirecionalCycleMoveset", DirecionalCycleMoveset);
+    RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("DirecionalCycleMoveset", DirecionalCycleMoveset);
 }
 
 // NOVA FUNÇÃO AUXILIAR PARA QUALQUER ATOR
@@ -272,6 +272,7 @@ void GlobalControl::StancesSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
                 if(!except) {
                 except = true;
                 SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
                 if (!SkyPromptAPI::SendPrompt(StancesChangesSink::GetSingleton(), g_clientID)) {
                     logger::error("Skyprompt didnt worked Stances Changes Sink");
                 }
@@ -281,6 +282,7 @@ void GlobalControl::StancesSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
         case SkyPromptAPI::kUp:
             except = false;
             SkyPromptAPI::RemovePrompt(StancesChangesSink::GetSingleton(), GlobalControl::g_clientID);
+            SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
             if (!SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), GlobalControl::g_clientID)) {
                 logger::error("Skyprompt didnt worked Moveset Sink");
             }
@@ -292,8 +294,8 @@ void GlobalControl::StancesSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
             g_currentStance = 0;
             SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
             SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
-            RE::PlayerCharacter::GetSingleton()->SetGraphVariableFloat("testarone", g_currentMoveset);
-            RE::PlayerCharacter::GetSingleton()->SetGraphVariableFloat("cycle_instance", g_currentStance);
+            RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", g_currentMoveset);
+            RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("cycle_instance", g_currentStance);
             if (!SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), GlobalControl::g_clientID)) {
                 logger::error("Skyprompt didnt worked Moveset Sink");
             }
@@ -313,35 +315,34 @@ void GlobalControl::StancesChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent e
     
     switch (event.prompt.eventID) {
         case 2:  // stance anterior
-            GlobalControl::g_currentStance -= 1.0f;
-            if (GlobalControl::g_currentStance < 1.0f) {
-                GlobalControl::g_currentStance = 1.0f;  // Vai para o último
+            g_currentStance -= 1;
+            if (g_currentStance < 1) {
+                g_currentStance = 4;  // Vai para o último
             }
-            logger::info("stance foi para: {}", GlobalControl::g_currentStance);
-            //RE::DebugNotification(std::format("Variavel: {:.0f}", stance).c_str());
+            logger::info("stance foi para: {}", g_currentStance);
+            //RE::DebugNotification(std::format("Variavel: {}", stance).c_str());
             break;
 
         case 3:  // Proximo stance
-            GlobalControl::g_currentStance += 1.0f;
-            if (GlobalControl::g_currentStance > 4) {
-                GlobalControl::g_currentStance = 1.0f;  // Volta para o primeiro
+            g_currentStance += 1;
+            if (g_currentStance > 4) {
+                g_currentStance = 1;  // Volta para o primeiro
             }
-            logger::info("stance aumentou para: {}", GlobalControl::g_currentStance);
-            //RE::DebugNotification(std::format("Variavel: {:.0f}", stance).c_str());
+            logger::info("stance aumentou para: {}", g_currentStance);
+            //RE::DebugNotification(std::format("Variavel: {}", stance).c_str());
             break;
 
 
     }
     // REQUERIMENTO 5: Mostra a nova contagem (x/y) imediatamente
-    std::string category = GetCurrentWeaponCategoryName();
-    int maxMovesets =
-        AnimationManager::GetMaxMovesetsFor(category, static_cast<int>(GlobalControl::g_currentStance) - 1);
+    logger::info("O valor de MovesetText é: {}", MovesetText);
     g_currentMoveset = 1;
-    GlobalControl::StanceText = "Stance " + std::format("{:.0f}", GlobalControl::g_currentStance);
-    RE::PlayerCharacter::GetSingleton()->SetGraphVariableFloat("testarone", g_currentMoveset);
-    RE::PlayerCharacter::GetSingleton()->SetGraphVariableFloat("cycle_instance", GlobalControl::g_currentStance);
-    MovesetText = std::format("Moveset {:.0f}/{}", g_currentMoveset, maxMovesets).c_str();
+    RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", g_currentMoveset);
+    RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("cycle_instance", g_currentStance);
+
+    UpdateSkyPromptTexts();
     SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
+    SkyPromptAPI::SendPrompt(StancesChangesSink::GetSingleton(), g_clientID);
     SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
     SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
     
@@ -361,6 +362,7 @@ void GlobalControl::MovesetSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
             if (!except) {
                 except = true;
                 SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), GlobalControl::g_clientID);
+                SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), GlobalControl::g_clientID);
                 if (!SkyPromptAPI::SendPrompt(MovesetChangesSink::GetSingleton(), GlobalControl::g_clientID)) {
                     logger::error("Skyprompt didnt worked Stances Changes Sink");
                 }
@@ -369,15 +371,11 @@ void GlobalControl::MovesetSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
         case SkyPromptAPI::kUp:
             except = false;
             SkyPromptAPI::RemovePrompt(MovesetChangesSink::GetSingleton(), GlobalControl::g_clientID);
-            if (!SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), GlobalControl::g_clientID)) {
-                logger::error("Skyprompt didnt worked Moveset Sink");
-            }
-            if (!SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), GlobalControl::g_clientID)) {
-                logger::error("Skyprompt didnt worked Moveset Sink");
-            }
+            SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+            SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
             break;
         case SkyPromptAPI::kDeclined:
-            RE::PlayerCharacter::GetSingleton()->SetGraphVariableFloat("testarone", 0);
+            RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", 0);
             GlobalControl::MovesetText = "Moveset Menu";
             SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
             break;
@@ -402,40 +400,40 @@ void GlobalControl::MovesetChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent e
 
     // Se não há movesets configurados para esta stance/arma, não faz nada.
     if (maxMovesets <= 0) {
-        RE::PlayerCharacter::GetSingleton()->SetGraphVariableFloat("testarone",
-                                                                   0.0f);  // Garante que nenhuma animação toque
+        RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone",
+                                                                   0);  // Garante que nenhuma animação toque
         return;
     }
 
-    static float cycleplayer = 0.0f;
     switch (event.prompt.eventID) {
         case 2:  // Moveset anterior
-            g_currentMoveset -= 1.0f;
-            if (g_currentMoveset < 1.0f) {
+            g_currentMoveset -= 1;
+            if (g_currentMoveset < 1) {
                 g_currentMoveset = maxMovesets;  // Vai para o último
             }
             logger::info("Variavel Global diminuiu para: {}", g_currentMoveset);
-            //RE::DebugNotification(std::format("Variavel: {:.0f}", cycleplayer).c_str());
+            //RE::DebugNotification(std::format("Variavel: {}", cycleplayer).c_str());
             
             break;
 
         case 3:  // Proximo moveset
-            g_currentMoveset += 1.0f;
+            g_currentMoveset += 1;
             if (g_currentMoveset > maxMovesets) {
-                g_currentMoveset = 1.0f;  // Volta para o primeiro
+                g_currentMoveset = 1;  // Volta para o primeiro
             }
             logger::info("Variavel Global aumentou para: {}", g_currentMoveset);
             
-            //RE::DebugNotification(std::format("Variavel: {:.0f}", cycleplayer).c_str());
+            //RE::DebugNotification(std::format("Variavel: {}", cycleplayer).c_str());
             break;
 
     
 
     }
-    MovesetText = std::format("Moveset {:.0f}/{}", g_currentMoveset, maxMovesets).c_str();
+    UpdateSkyPromptTexts();
     logger::info("teste {}", MovesetText);
-    RE::PlayerCharacter::GetSingleton()->SetGraphVariableFloat("testarone", g_currentMoveset);
+    RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", g_currentMoveset);
     SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+    SkyPromptAPI::SendPrompt(MovesetChangesSink::GetSingleton(), g_clientID);
 
 }
 
@@ -450,6 +448,8 @@ RE::BSEventNotifyControl GlobalControl::CameraChange::ProcessEvent(const SKSE::C
         Cycleopen = false;
         SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
         SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
+        SkyPromptAPI::RemovePrompt(StancesChangesSink::GetSingleton(), g_clientID);
+        SkyPromptAPI::RemovePrompt(MovesetChangesSink::GetSingleton(), g_clientID);
         logger::info("me retorna aqui vei");
     }
     if (RE::PlayerCamera::GetSingleton()->IsInThirdPerson() && g_isWeaponDrawn && !Cycleopen) {
@@ -468,7 +468,7 @@ RE::BSEventNotifyControl GlobalControl::ActionEventHandler::ProcessEvent(const S
     // REQUERIMENTO 1, 2, 3: Pegar todas as informações necessárias
     std::string category = GetCurrentWeaponCategoryName();
     // O índice do cache é 0-3, mas a stance no jogo é 1-4.
-    int stanceIndex = static_cast<int>(GlobalControl::g_currentStance) - 1;
+    int stanceIndex = g_currentStance - 1;
     int maxMovesets = AnimationManager::GetMaxMovesetsFor(category, stanceIndex);
 
     if (a_event && a_event->actor && a_event->actor->IsPlayerRef()) {
@@ -479,13 +479,13 @@ RE::BSEventNotifyControl GlobalControl::ActionEventHandler::ProcessEvent(const S
             g_isWeaponDrawn = true;  // Define nosso controle como verdadeiro
             Cycleopen = true;
             // Envia os prompts para a API, fazendo o menu aparecer
-            MovesetText = std::format("Moveset {:.0f}/{}", g_currentMoveset, maxMovesets).c_str();
+            UpdateSkyPromptTexts();
             SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
             SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
         }
         if (a_event->type == SKSE::ActionEvent::Type::kBeginDraw) {
             SKSE::log::info("Arma sacada, mostrando o menu.");
-            MovesetText = std::format("Moveset {:.0f}/{}", g_currentMoveset, maxMovesets).c_str();
+            UpdateSkyPromptTexts();
             g_isWeaponDrawn = true;  // Define nosso controle como verdadeiro
 
         }
@@ -496,6 +496,8 @@ RE::BSEventNotifyControl GlobalControl::ActionEventHandler::ProcessEvent(const S
             // Limpa os prompts da API, fazendo o menu desaparecer
             SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
             SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
+            SkyPromptAPI::RemovePrompt(StancesChangesSink::GetSingleton(), g_clientID);
+            SkyPromptAPI::RemovePrompt(MovesetChangesSink::GetSingleton(), g_clientID);
         }
     }
     return RE::BSEventNotifyControl::kContinue;
@@ -541,9 +543,9 @@ void GlobalControl::TriggerSmartRandomNumber(const std::string& eventSource) {
 
         // PONTO 1: O número gerado agora é diretamente um dos movesets disponíveis
         int randomNumber = availableMovesets[distrib(gen)];
-        g_currentMoveset = static_cast<float>(randomNumber);
-        player->SetGraphVariableFloat("testarone", g_currentMoveset);
-        MovesetText = std::format("Moveset {:.0f}/{}", g_currentMoveset, maxMovesets).c_str();
+        g_currentMoveset = randomNumber;
+        player->SetGraphVariableInt("testarone", g_currentMoveset);
+        UpdateSkyPromptTexts();
         g_comboState.previousMoveset = g_comboState.lastMoveset;
         g_comboState.lastMoveset = randomNumber;
         if (g_isWeaponDrawn) {
@@ -554,7 +556,7 @@ void GlobalControl::TriggerSmartRandomNumber(const std::string& eventSource) {
 
         
 
-        SKSE::log::info("{} (Player, {} movesets): Número gerado: {}", eventSource, maxMovesets, randomNumber);
+        //SKSE::log::info("{} (Player, {} movesets): Número gerado: {}", eventSource, maxMovesets, randomNumber);
     }
 }
 
@@ -591,13 +593,14 @@ RE::BSEventNotifyControl GlobalControl::MenuOpen::ProcessEvent(const RE::MenuOpe
     int maxMovesets = AnimationManager::GetMaxMovesetsFor(category, stanceIndex);
     if (!IsAnyMenuOpen && IsThirdPerson && g_isWeaponDrawn && !Cycleopen) {
         Cycleopen = true;
-        MovesetText = std::format("Moveset {:.0f}/{}", g_currentMoveset, maxMovesets).c_str();
+        UpdateSkyPromptTexts();
+        logger::info("O valor de MovesetText é: {}", MovesetText);
         SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
         SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
     } 
     if (IsAnyMenuOpen && IsThirdPerson) {
         Cycleopen = false;
-        MovesetText = std::format("Moveset {:.0f}/{}", g_currentMoveset, maxMovesets).c_str();
+        UpdateSkyPromptTexts();
         SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
         SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
     }
@@ -760,8 +763,8 @@ void GlobalControl::NPCrandomNumber(RE::Actor* targetActor, const std::string& e
         // PONTO 1: O número gerado agora é diretamente um dos movesets disponíveis
         int randomNumber = availableMovesets[distrib(gen)];
 
-        targetActor->SetGraphVariableFloat("testarone", static_cast<float>(randomNumber));
-        targetActor->SetGraphVariableFloat("cycle_instance", 0);
+        targetActor->SetGraphVariableInt("testarone", randomNumber);
+        targetActor->SetGraphVariableInt("cycle_instance", 0);
         state.previousMoveset = state.lastMoveset;
         state.lastMoveset = randomNumber;
 
@@ -831,4 +834,64 @@ void GlobalControl::NpcCombatTracker::UnregisterSink(RE::Actor* a_actor) {
         g_trackedNPCs.erase(a_actor->GetFormID());
         SKSE::log::info("[NpcCombatTracker] Parando de rastrear animações do ator {:08X}", a_actor->GetFormID());
     }
+}
+
+void GlobalControl::UpdateSkyPromptTexts() {
+    auto& animManager = AnimationManager::GetSingleton();
+    std::string category = GetCurrentWeaponCategoryName();
+
+    // --- LÓGICA PARA STANCES (seu código atual está ótimo aqui) ---
+    int currentStanceIndex = g_currentStance - 1;  // 0-3
+    if (currentStanceIndex >= 0 && currentStanceIndex < 4) {
+        int nextStanceIndex = (currentStanceIndex + 1) % 4;
+        int backStanceIndex = (currentStanceIndex - 1 + 4) % 4;
+        StanceText = animManager.GetStanceName(category, currentStanceIndex);
+        StanceNextText = animManager.GetStanceName(category, nextStanceIndex);
+        StanceBackText = animManager.GetStanceName(category, backStanceIndex);
+    }
+
+    // --- LÓGICA PARA MOVESETS (seu código atual está ótimo aqui) ---
+    int maxMovesets = animManager.GetMaxMovesetsFor(category, currentStanceIndex);
+    int currentMovesetIndex = g_currentMoveset;  // 1-N
+    if (maxMovesets > 0) {
+        std::string currentMovesetName =
+            animManager.GetCurrentMovesetName(category, currentStanceIndex, currentMovesetIndex);
+        MovesetText = std::format("{} ({}/{})", currentMovesetName, currentMovesetIndex, maxMovesets);
+
+        if (maxMovesets > 1) {
+            int nextMovesetIndex = (currentMovesetIndex % maxMovesets) + 1;
+            int backMovesetIndex = (currentMovesetIndex - 2 + maxMovesets) % maxMovesets + 1;
+            MovesetNextText = animManager.GetCurrentMovesetName(category, currentStanceIndex, nextMovesetIndex);
+            MovesetBackText = animManager.GetCurrentMovesetName(category, currentStanceIndex, backMovesetIndex);
+        } else {
+            MovesetNextText = "";
+            MovesetBackText = "";
+        }
+    } else {
+        MovesetText = "Nenhum Moveset";
+        MovesetNextText = "";
+        MovesetBackText = "";
+    }
+
+    // ================== INÍCIO DA MUDANÇA ESSENCIAL ==================
+
+    // 1. Recrie os objetos Prompt globais com os textos atualizados
+    stance_actual = SkyPromptAPI::Prompt(StanceText, 0, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Stances_menu,
+                                         0xFFFFFFFF, 0.999f);
+    moveset_actual = SkyPromptAPI::Prompt(MovesetText, 1, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Moveset_menu,
+                                          0xFFFFFFFF, 0.999f);
+    menu_stance = SkyPromptAPI::Prompt(StanceText, 0, 0, SkyPromptAPI::PromptType::kHoldAndKeep, 20, Stances_menu);
+    stance_next = SkyPromptAPI::Prompt(StanceNextText, 3, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Next_key);
+    stance_back = SkyPromptAPI::Prompt(StanceBackText, 2, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Back_key);
+    menu_moveset = SkyPromptAPI::Prompt(MovesetText, 1, 0, SkyPromptAPI::PromptType::kHoldAndKeep, 20, Moveset_menu);
+    moveset_next = SkyPromptAPI::Prompt(MovesetNextText, 3, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Next_key);
+    moveset_back = SkyPromptAPI::Prompt(MovesetBackText, 2, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Back_key);
+
+    // 2. Chame a função de update para cada sink
+    StancesSink::GetSingleton()->UpdatePrompts();
+    StancesChangesSink::GetSingleton()->UpdatePrompts();
+    MovesetSink::GetSingleton()->UpdatePrompts();
+    MovesetChangesSink::GetSingleton()->UpdatePrompts();
+
+    // =================== FIM DA MUDANÇA ESSENCIAL ===================
 }
