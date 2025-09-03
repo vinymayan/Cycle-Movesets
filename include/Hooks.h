@@ -27,8 +27,9 @@ namespace Settings {
     inline bool CycleMoveset = true;
     inline float CycleTimer = 1.4f;
     inline bool RandomCycle = false;
-
+    inline bool ShowMenu = true;
     inline std::string SelectedLanguage = "English";
+    
 }
 
 // Namespace para a nossa UI

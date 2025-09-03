@@ -69,7 +69,8 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         GlobalControl::g_clientID = SkyPromptAPI::RequestClientID();
         if (GlobalControl::g_clientID > 0) {
             SKSE::log::info("ClientID {} recebido da SkyPromptAPI.", GlobalControl::g_clientID);
-            if (!SkyPromptAPI::RequestTheme(GlobalControl::g_clientID, "Cycle Movesets")) {
+            if (!SkyPromptAPI::RequestTheme(GlobalControl::g_clientID,
+                                            Settings::ShowMenu ? "Cycle Movesets" : "Cycle Movesets_hidden")) {
 			    logger::error("Falha ao solicitar o tema 'Cycle Movesets' na SkyPromptAPI.");
             }
         } else {

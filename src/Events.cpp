@@ -70,7 +70,15 @@ namespace MyMenu {
                 if (settings_changed) {
                     MyMenu::SaveSettings();
                 }
-
+                if (ImGui::Checkbox(
+                        "Show menu",
+                        &Settings::ShowMenu)) {  // Supondo que você adicionará a tradução LOC("option_random_cycle")
+                    settings_changed = true;
+                    if (!SkyPromptAPI::RequestTheme(GlobalControl::g_clientID,
+                                                   Settings::ShowMenu ? "Cycle Movesets" : "Cycle Movesets_hidden")) {
+                        logger::error("Falha ao solicitar o tema");
+                    }
+                }
                 ImGui::EndTabItem();
             }
 
@@ -139,6 +147,7 @@ namespace MyMenu {
         doc.AddMember("CycleMoveset", Settings::CycleMoveset, allocator);
         doc.AddMember("RandomCycle", Settings::RandomCycle, allocator);
         doc.AddMember("CycleTimer", Settings::CycleTimer, allocator);
+        doc.AddMember("ShowMenu", Settings::ShowMenu, allocator);
 
         // Cria o array de dispositivos
         rapidjson::Value devicesArray(rapidjson::kArrayType);
@@ -227,6 +236,9 @@ namespace MyMenu {
         }
         if (doc.HasMember("CycleTimer") && doc["CycleTimer"].IsFloat()) {
             Settings::CycleTimer = doc["CycleTimer"].GetFloat();
+        }
+        if (doc.HasMember("ShowMenu") && doc["ShowMenu"].IsBool()) {
+            Settings::ShowMenu = doc["ShowMenu"].GetBool();
         }
 
         // Carrega as configurações dos dispositivos

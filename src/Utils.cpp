@@ -892,16 +892,24 @@ void GlobalControl::UpdateSkyPromptTexts() {
     // ================== INÍCIO DA MUDANÇA ESSENCIAL ==================
 
     // 1. Recrie os objetos Prompt globais com os textos atualizados
-    stance_actual = SkyPromptAPI::Prompt(StanceText, 0, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Stances_menu,
+    stance_actual = SkyPromptAPI::Prompt(StanceText, 0, 0, SkyPromptAPI::PromptType::kSinglePress, Settings::ShowMenu ? 20 : 0,
+                                         Stances_menu,
                                          0xFFFFFFFF, 0.999f);
-    moveset_actual = SkyPromptAPI::Prompt(MovesetText, 1, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Moveset_menu,
+    moveset_actual = SkyPromptAPI::Prompt(MovesetText, 1, 0, SkyPromptAPI::PromptType::kSinglePress,
+                                          Settings::ShowMenu ? 20 : 0, Moveset_menu,
                                           0xFFFFFFFF, 0.999f);
-    menu_stance = SkyPromptAPI::Prompt(StanceText, 0, 0, SkyPromptAPI::PromptType::kHoldAndKeep, 20, Stances_menu);
-    stance_next = SkyPromptAPI::Prompt(StanceNextText, 3, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Next_key);
-    stance_back = SkyPromptAPI::Prompt(StanceBackText, 2, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Back_key);
-    menu_moveset = SkyPromptAPI::Prompt(MovesetText, 1, 0, SkyPromptAPI::PromptType::kHoldAndKeep, 20, Moveset_menu);
-    moveset_next = SkyPromptAPI::Prompt(MovesetNextText, 3, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Next_key);
-    moveset_back = SkyPromptAPI::Prompt(MovesetBackText, 2, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Back_key);
+    menu_stance = SkyPromptAPI::Prompt(StanceText, 0, 0, SkyPromptAPI::PromptType::kHoldAndKeep,
+                                       Settings::ShowMenu ? 20 : 0, Stances_menu);
+    stance_next = SkyPromptAPI::Prompt(StanceNextText, 3, 0, SkyPromptAPI::PromptType::kSinglePress,
+                                       Settings::ShowMenu ? 20 : 0, Next_key);
+    stance_back = SkyPromptAPI::Prompt(StanceBackText, 2, 0, SkyPromptAPI::PromptType::kSinglePress,
+                                       Settings::ShowMenu ? 20 : 0, Back_key);
+    menu_moveset = SkyPromptAPI::Prompt(MovesetText, 1, 0, SkyPromptAPI::PromptType::kHoldAndKeep,
+                                        Settings::ShowMenu ? 20 : 0, Moveset_menu);
+    moveset_next = SkyPromptAPI::Prompt(MovesetNextText, 3, 0, SkyPromptAPI::PromptType::kSinglePress,
+                                        Settings::ShowMenu ? 20 : 0, Next_key);
+    moveset_back = SkyPromptAPI::Prompt(MovesetBackText, 2, 0, SkyPromptAPI::PromptType::kSinglePress,
+                                        Settings::ShowMenu ? 20 : 0, Back_key);
 
     // 2. Chame a função de update para cada sink
     StancesSink::GetSingleton()->UpdatePrompts();
