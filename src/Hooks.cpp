@@ -389,7 +389,7 @@ void AnimationManager::DrawAddModModal() {
     if (_isAddModModalOpen) {
         if (_instanceToAddTo) {
             ImGui::OpenPopup(LOC("add_moveset"));
-        } else if (_modInstanceToAddTo || _userMovesetToAddTo) {
+        } else if (_modInstanceToAddTo || _userMovesetToAddTo || _stanceToAddTo) {
             ImGui::OpenPopup(LOC("add_animation"));
         }
         _isAddModModalOpen = false;
@@ -498,7 +498,18 @@ void AnimationManager::DrawAddModModal() {
                                         _modInstanceToAddTo->subAnimationInstances.push_back(newSubInstance);
                                     } else if (_userMovesetToAddTo) {
                                         _userMovesetToAddTo->subAnimations.push_back(newSubInstance);
+                                    } else if (_stanceToAddTo) {
+                                        //const auto& subAnimDef = modDef.subAnimations[subAnimIdx];
+                                        // Cria uma instância completa da nova estrutura
+                                        CreatorSubAnimationInstance newInstance;
+                                        newInstance.sourceDef = &subAnimDef;
+                                        strcpy_s(newInstance.editedName.data(), newInstance.editedName.size(),
+                                                 subAnimDef.name.c_str());
+
+                                        // Adiciona a nova instância completa ao vetor
+                                        _stanceToAddTo->subMovesets.push_back(newInstance);
                                     }
+
                                 }
                                 // Se a largura disponível for maior que o botão, alinha
                                 if (content_avail.x > button_width) {
@@ -535,7 +546,10 @@ void AnimationManager::DrawMainMenu() {
             DrawAnimationManager();  // Chama a UI da primeira aba
             ImGui::EndTabItem();
         }
-
+        //if (ImGui::BeginTabItem(LOC("tab_moveset_creator"))) {
+        //    DrawUserMovesetCreator();  // Chama a nova UI
+        //    ImGui::EndTabItem();
+        //}
         //if (ImGui::BeginTabItem(LOC("tab_user_movesets"))) {
         //    DrawUserMovesetManager();  // Chama a UI da segunda aba
         //    ImGui::EndTabItem();
@@ -549,6 +563,109 @@ void AnimationManager::DrawMainMenu() {
     DrawAddModModal();
     DrawStanceEditorPopup();
     DrawRestartPopup();
+}
+// Nova função para desenhar a interface de criação de movesets
+void AnimationManager::DrawUserMovesetCreator() {
+    ImGui::Text("Ferramenta de Criação de Moveset");
+    ImGui::Separator();
+
+    // Seção de botões principais
+    if (ImGui::Button("Salvar Novo Moveset")) {
+        SaveUserMoveset();  // Função que vamos criar
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Carregar Moveset para Editar")) {
+        // LoadUserMoveset(); // Função para o requisito 2.5
+    }
+    ImGui::Separator();
+
+    // Campos de Informação do Moveset
+    ImGui::InputText("Nome do Moveset", _newMovesetName, sizeof(_newMovesetName));
+    ImGui::InputText("Autor", _newMovesetAuthor, sizeof(_newMovesetAuthor));
+    ImGui::InputText("Descrição", _newMovesetDesc, sizeof(_newMovesetDesc));
+
+    // Seleção de Categoria de Arma
+    std::vector<const char*> categoryNames;
+    for (const auto& pair : _categories) {
+        categoryNames.push_back(pair.first.c_str());
+    }
+    ImGui::Combo("Categoria de Arma", &_newMovesetCategoryIndex, categoryNames.data(), categoryNames.size());
+
+    // Seleção de Tipo (MCO/BFCO)
+    ImGui::RadioButton("MCO", reinterpret_cast<int*>(&_newMovesetIsBFCO), 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("BFCO", reinterpret_cast<int*>(&_newMovesetIsBFCO), 1);
+
+    ImGui::Separator();
+    ImGui::Text("Stances e Sub-Movesets");
+
+    // Abas para as 4 Stances
+    if (ImGui::BeginTabBar("NewMovesetStanceTabs")) {
+        for (int i = 0; i < 4; ++i) {
+            std::string stanceTabName = std::format("Stance {}", i + 1);
+            if (ImGui::BeginTabItem(stanceTabName.c_str(), &_newMovesetStanceEnabled[i])) {
+                if (ImGui::Button(std::format("Adicionar Sub-Moveset à Stance {}", i + 1).c_str())) {
+                    _isAddModModalOpen = true;
+                    _stanceToAddTo = &_newMovesetStances[i];
+                    _instanceToAddTo = nullptr;
+                    _modInstanceToAddTo = nullptr;
+                    _userMovesetToAddTo = nullptr;
+                }
+
+                ImGui::Separator();
+
+                int subToRemove = -1;
+                for (size_t j = 0; j < _newMovesetStances[i].subMovesets.size(); ++j) {
+                    auto& subInst = _newMovesetStances[i].subMovesets[j];
+
+                    ImGui::PushID(static_cast<int>(j));
+                    if (ImGui::Button("X")) {
+                        subToRemove = j;
+                    }
+                    ImGui::SameLine();
+                    ImGui::InputText("##SubName", subInst.editedName.data(), subInst.editedName.size());
+                    ImGui::SameLine();
+                    ImGui::Text("<- %s", subInst.sourceDef->name.c_str());
+
+                    // ======================= ADIÇÃO DAS CHECKBOXES (Problema 3) =======================
+                    ImGui::Indent();  // Adiciona um recuo para as checkboxes
+
+                    ImGui::Checkbox("F", &subInst.pFront);
+                    ImGui::SameLine();
+                    ImGui::Checkbox("B", &subInst.pBack);
+                    ImGui::SameLine();
+                    ImGui::Checkbox("L", &subInst.pLeft);
+                    ImGui::SameLine();
+                    ImGui::Checkbox("R", &subInst.pRight);
+                    ImGui::SameLine();
+                    ImGui::Checkbox("FR", &subInst.pFrontRight);
+                    ImGui::SameLine();
+                    ImGui::Checkbox("FL", &subInst.pFrontLeft);
+                    ImGui::SameLine();
+                    ImGui::Checkbox("BR", &subInst.pBackRight);
+                    ImGui::SameLine();
+                    ImGui::Checkbox("BL", &subInst.pBackLeft);
+                    ImGui::SameLine();
+                    ImGui::Checkbox("Rnd", &subInst.pRandom);
+                    ImGui::SameLine();
+                    ImGui::Checkbox("Movement", &subInst.pDodge);
+
+                    ImGui::Unindent();
+                    // ===============================================================================
+
+                    ImGui::PopID();
+                    ImGui::Separator();
+                }
+
+                if (subToRemove != -1) {
+                    _newMovesetStances[i].subMovesets.erase(_newMovesetStances[i].subMovesets.begin() + subToRemove);
+                }
+
+                ImGui::EndTabItem();
+            }
+        }
+        ImGui::EndTabBar();
+    }
 }
 
 void AnimationManager::DrawNPCMenu() { 
@@ -1200,7 +1317,13 @@ void AnimationManager::UpdateOrCreateJson(const std::filesystem::path& jsonPath,
     auto& allocator = doc.GetAllocator();
 
     // ---> INÍCIO DA NOVA LÓGICA DE PRIORIDADE <---
-
+    std::string movesetName = jsonPath.parent_path().filename().string();
+    if (doc.HasMember("name")) {
+        doc["name"].SetString(movesetName.c_str(), allocator);
+    } else {
+        // Adiciona o novo membro. A ordem exata não é garantida, mas não é necessária.
+        doc.AddMember("name", rapidjson::Value(movesetName.c_str(), allocator), allocator);
+    }
     // 1. Lê a prioridade base do arquivo. Se não existir, usa um valor padrão (ex: 0).
     int basePriority = 2000000000;
     if (doc.HasMember("priority") && doc["priority"].IsInt()) {
@@ -2194,77 +2317,98 @@ found_parent:
 // Adicione estas duas funções em Hooks.cpp
 
 void AnimationManager::SaveStanceNames() {
-    SKSE::log::info("Salvando nomes das stances...");
-    const std::filesystem::path savePath = "Data/SKSE/Plugins/CycleMovesets/StanceNames.json";
+    SKSE::log::info("Salvando nomes das stances em arquivos separados por categoria...");
+    const std::filesystem::path stancesFolderPath = "Data/SKSE/Plugins/CycleMovesets/Stances";
 
-    rapidjson::Document doc;
-    doc.SetObject();
-    auto& allocator = doc.GetAllocator();
-
-    for (const auto& pair : _categories) {
-        const WeaponCategory& category = pair.second;
-        rapidjson::Value stanceNamesArray(rapidjson::kArrayType);
-        for (const auto& name : category.stanceNames) {
-            stanceNamesArray.PushBack(rapidjson::Value(name.c_str(), allocator), allocator);
+    try {
+        // Garante que o diretório "Stances" existe
+        if (!std::filesystem::exists(stancesFolderPath)) {
+            std::filesystem::create_directories(stancesFolderPath);
         }
-        doc.AddMember(rapidjson::Value(category.name.c_str(), allocator), stanceNamesArray, allocator);
-    }
-
-    // Escreve o arquivo
-    std::ofstream ofs(savePath);
-    if (!ofs) {
-        SKSE::log::error("Falha ao abrir {} para escrita!", savePath.string());
+    } catch (const std::filesystem::filesystem_error& e) {
+        SKSE::log::error("Falha ao criar o diretório de stances: {}. Erro: {}", stancesFolderPath.string(), e.what());
         return;
     }
-    rapidjson::StringBuffer buffer;
-    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
-    doc.Accept(writer);
-    ofs << buffer.GetString();
-    ofs.close();
-    SKSE::log::info("Nomes das stances salvos com sucesso.");
+
+    // Itera sobre cada categoria de arma
+    for (const auto& pair : _categories) {
+        const WeaponCategory& category = pair.second;
+        std::filesystem::path categorySavePath = stancesFolderPath / (category.name + ".json");
+
+        rapidjson::Document doc;
+        doc.SetArray();  // O documento raiz será um array
+        auto& allocator = doc.GetAllocator();
+
+        // Adiciona os 4 nomes de stance ao array
+        for (const auto& name : category.stanceNames) {
+            doc.PushBack(rapidjson::Value(name.c_str(), allocator), allocator);
+        }
+
+        // Escreve o arquivo JSON específico para esta categoria
+        std::ofstream ofs(categorySavePath);
+        if (!ofs) {
+            SKSE::log::error("Falha ao abrir {} para escrita!", categorySavePath.string());
+            continue;  // Pula para a próxima categoria em caso de erro
+        }
+
+        rapidjson::StringBuffer buffer;
+        rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
+        doc.Accept(writer);
+        ofs << buffer.GetString();
+        ofs.close();
+    }
+
+    SKSE::log::info("Nomes das stances salvos com sucesso em arquivos individuais.");
 }
 
 void AnimationManager::LoadStanceNames() {
-    SKSE::log::info("Carregando nomes das stances...");
-    const std::filesystem::path loadPath = "Data/SKSE/Plugins/CycleMovesets/StanceNames.json";
+    SKSE::log::info("Carregando nomes das stances de arquivos individuais por categoria...");
+    const std::filesystem::path stancesFolderPath = "Data/SKSE/Plugins/CycleMovesets/Stances";
 
-    if (!std::filesystem::exists(loadPath)) {
-        SKSE::log::info("Arquivo de nomes de stance não encontrado. Usando padrões.");
+    if (!std::filesystem::exists(stancesFolderPath)) {
+        SKSE::log::info("Diretório de nomes de stance não encontrado. Usando padrões.");
         return;
     }
 
-    std::ifstream ifs(loadPath);
-    if (!ifs) {
-        SKSE::log::error("Falha ao abrir {} para leitura!", loadPath.string());
-        return;
-    }
-
-    std::string jsonContent((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-    ifs.close();
-
-    rapidjson::Document doc;
-    doc.Parse(jsonContent.c_str());
-
-    if (doc.HasParseError() || !doc.IsObject()) {
-        SKSE::log::error("Erro no parse do JSON de nomes de stance.");
-        return;
-    }
-
+    // Itera sobre cada categoria de arma para carregar seu respectivo arquivo
     for (auto& pair : _categories) {
         WeaponCategory& category = pair.second;
-        if (doc.HasMember(category.name.c_str()) && doc[category.name.c_str()].IsArray()) {
-            const auto& stanceNamesArray = doc[category.name.c_str()].GetArray();
-            for (rapidjson::SizeType i = 0; i < stanceNamesArray.Size() && i < 4; ++i) {
-                if (stanceNamesArray[i].IsString()) {
-                    category.stanceNames[i] = stanceNamesArray[i].GetString();
-                    // Atualiza o buffer do ImGui também
-                    strcpy_s(category.stanceNameBuffers[i].data(), category.stanceNameBuffers[i].size(),
-                             category.stanceNames[i].c_str());
-                }
+        std::filesystem::path categoryLoadPath = stancesFolderPath / (category.name + ".json");
+
+        if (!std::filesystem::exists(categoryLoadPath)) {
+            // Se o arquivo para esta categoria não existe, apenas pula para a próxima
+            continue;
+        }
+
+        std::ifstream ifs(categoryLoadPath);
+        if (!ifs) {
+            SKSE::log::error("Falha ao abrir {} para leitura!", categoryLoadPath.string());
+            continue;
+        }
+
+        std::string jsonContent((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+        ifs.close();
+
+        rapidjson::Document doc;
+        doc.Parse(jsonContent.c_str());
+
+        if (doc.HasParseError() || !doc.IsArray()) {
+            SKSE::log::error("Erro no parse do JSON ou o arquivo não é um array para a categoria: {}", category.name);
+            continue;
+        }
+
+        const auto& stanceNamesArray = doc.GetArray();
+        for (rapidjson::SizeType i = 0; i < stanceNamesArray.Size() && i < 4; ++i) {
+            if (stanceNamesArray[i].IsString()) {
+                category.stanceNames[i] = stanceNamesArray[i].GetString();
+                // Atualiza o buffer do ImGui também para a UI refletir a mudança
+                strcpy_s(category.stanceNameBuffers[i].data(), category.stanceNameBuffers[i].size(),
+                         category.stanceNames[i].c_str());
             }
         }
     }
-    SKSE::log::info("Nomes de stance carregados com sucesso.");
+
+    SKSE::log::info("Nomes de stance individuais carregados com sucesso.");
 }
 
 void AnimationManager::DrawStanceEditorPopup() {
@@ -2331,4 +2475,150 @@ void AnimationManager::DrawRestartPopup() {
         }
         ImGui::EndPopup();
     }
+}
+
+void AnimationManager::SaveUserMoveset() {
+    std::string movesetName = _newMovesetName;
+    if (movesetName.empty()) {
+        SKSE::log::error("Não é possível salvar um moveset sem nome.");
+        RE::DebugNotification("ERRO: O nome do moveset não pode estar vazio!");
+        return;
+    }
+
+    SKSE::log::info("Iniciando salvamento do moveset do usuário: {}", movesetName);
+
+    const std::filesystem::path oarRootPath = "Data\\meshes\\actors\\character\\animations\\OpenAnimationReplacer";
+    std::filesystem::path newMovesetPath = oarRootPath / movesetName;
+
+    // 1. Criar pastas (lógica principal e do moveset) - sem alterações
+    try {
+        if (!std::filesystem::exists(newMovesetPath.parent_path())) {
+            std::filesystem::create_directories(newMovesetPath.parent_path());
+        }
+        if (!std::filesystem::exists(newMovesetPath)) {
+            std::filesystem::create_directory(newMovesetPath);
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        SKSE::log::error("Falha ao criar a pasta do moveset: {}. Erro: {}", newMovesetPath.string(), e.what());
+        RE::DebugNotification("ERRO: Falha ao criar a pasta do moveset!");
+        return;
+    }
+
+    // 2. Criar o config.json principal (sem alterações)
+    {
+        rapidjson::Document doc;
+        doc.SetObject();
+        auto& allocator = doc.GetAllocator();
+        doc.AddMember("name", rapidjson::Value(_newMovesetName, allocator), allocator);
+        doc.AddMember("author", rapidjson::Value(_newMovesetAuthor, allocator), allocator);
+        doc.AddMember("description", rapidjson::Value(_newMovesetDesc, allocator), allocator);
+        doc.AddMember("createdBy", "MyCustomTool", allocator);
+        std::ofstream outFile(newMovesetPath / "config.json");
+        rapidjson::StringBuffer buffer;
+        rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
+        doc.Accept(writer);
+        outFile << buffer.GetString();
+        outFile.close();
+    }
+
+    // ======================= INÍCIO DA CORREÇÃO (Problema 1) =======================
+
+    // 3. Coletar TODAS as configurações ANTES de salvar os arquivos
+    std::map<std::filesystem::path, std::vector<FileSaveConfig>> fileUpdates;
+
+    std::vector<std::string> categoryNames;
+    for (const auto& pair : _categories) categoryNames.push_back(pair.first);
+    auto categoryIt = _categories.find(categoryNames[_newMovesetCategoryIndex]);
+    if (categoryIt == _categories.end()) {
+        SKSE::log::error("Categoria selecionada inválida durante o salvamento.");
+        return;
+    }
+    WeaponCategory* selectedCategory = &categoryIt->second;
+
+    for (int i = 0; i < 4; ++i) {  // Loop das Stances
+        if (!_newMovesetStanceEnabled[i]) continue;
+
+        const auto& stance = _newMovesetStances[i];
+        int playlistParentCounter = 1;
+        int lastParentOrder = 0;
+
+        for (const auto& subInst : stance.subMovesets) {  // Loop dos Sub-Movesets
+            std::string subMovesetFolderName = subInst.editedName.data();
+            if (subMovesetFolderName.empty()) continue;
+
+            std::filesystem::path subMovesetPath = newMovesetPath / subMovesetFolderName;
+            std::filesystem::path newConfigPath = subMovesetPath / "config.json";
+
+            // Prepara a estrutura de dados
+            FileSaveConfig config;
+            config.isNPC = false;
+            config.instance_index = i + 1;
+            config.category = selectedCategory;
+
+            // Copia o estado das checkboxes
+            config.pFront = subInst.pFront;
+            config.pBack = subInst.pBack;
+            config.pLeft = subInst.pLeft;
+            config.pRight = subInst.pRight;
+            config.pFrontRight = subInst.pFrontRight;
+            config.pFrontLeft = subInst.pFrontLeft;
+            config.pBackRight = subInst.pBackRight;
+            config.pBackLeft = subInst.pBackLeft;
+            config.pRandom = subInst.pRandom;
+            config.pDodge = subInst.pDodge;
+
+            // Determina se é Pai ou Filho e a ordem
+            config.isParent =
+                !(config.pFront || config.pBack || config.pLeft || config.pRight || config.pFrontRight ||
+                  config.pFrontLeft || config.pBackRight || config.pBackLeft || config.pRandom || config.pDodge);
+
+            if (config.isParent) {
+                lastParentOrder = playlistParentCounter;
+                config.order_in_playlist = playlistParentCounter++;
+            } else {
+                config.order_in_playlist = lastParentOrder;
+            }
+
+            fileUpdates[newConfigPath].push_back(config);
+            // 3.1. Criar a pasta do sub-moveset
+            try {
+                if (!std::filesystem::exists(subMovesetPath)) std::filesystem::create_directory(subMovesetPath);
+            } catch (const std::filesystem::filesystem_error& e) {
+                SKSE::log::error("Falha ao criar a pasta do sub-moveset: {}. Erro: {}", subMovesetPath.string(),
+                                 e.what());
+                continue;
+            }
+            
+            // 3.2. Criar o CycleDar.json do sub-moveset
+            {  
+                rapidjson::Document cycleDoc;
+                cycleDoc.SetObject();
+                auto& allocator = cycleDoc.GetAllocator();
+                std::string originalPathStr = subInst.sourceDef->path.parent_path().string();
+                size_t pos = originalPathStr.find("Data\\");
+                if (pos != std::string::npos) {
+                    originalPathStr = originalPathStr.substr(pos + 5);
+                }
+                cycleDoc.AddMember("pathDar", rapidjson::Value(originalPathStr.c_str(), allocator), allocator);
+                cycleDoc.AddMember("conversionDone", false, allocator);
+                cycleDoc.AddMember("convertBFCO", _newMovesetIsBFCO, allocator);
+                std::ofstream outFile(subMovesetPath / "CycleDar.json");
+                rapidjson::StringBuffer buffer;
+                rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
+                cycleDoc.Accept(writer);
+                outFile << buffer.GetString();
+                outFile.close();
+            }
+           
+        }
+    }
+    // 4. Agora, iterar sobre o mapa e salvar cada config.json UMA VEZ com todas as suas condições
+    for (const auto& pair : fileUpdates) {
+        const auto& path = pair.first;
+        const auto& configs = pair.second;
+        UpdateOrCreateJson(path, configs);
+    }
+    SKSE::log::info("Salvamento do moveset '{}' concluído.", movesetName);
+    RE::DebugNotification(std::format("Moveset '{}' salvo com sucesso!", movesetName).c_str());
+
 }

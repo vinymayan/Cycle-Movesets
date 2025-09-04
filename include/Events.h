@@ -13,6 +13,7 @@ class AnimationManager : public clib_util::singleton::ISingleton<AnimationManage
 public:
     void ScanAnimationMods();
     void DrawMainMenu();
+    void DrawUserMovesetCreator();
     void DrawNPCMenu();
     static int GetMaxMovesetsFor(const std::string& category, int stanceIndex);
     static int GetMaxMovesetsForNPC(const std::string& category, int stanceIndex);
@@ -72,6 +73,8 @@ private:
     void DrawStanceEditorPopup();
 
     void DrawRestartPopup();
+
+    void SaveUserMoveset();
 
     // --- NOVAS VARIÁVEIS PARA GERENCIAR MOVESETS DO USUÁRIO ---
 
@@ -135,6 +138,33 @@ private:
     WeaponCategory* _categoryToEdit = nullptr;
     int _stanceIndexToEdit = -1;
     char _editStanceNameBuffer[64] = "";
+
+     // Buffers para os campos de texto da UI
+    char _newMovesetName[128] = "";
+    char _newMovesetAuthor[128] = "";
+    char _newMovesetDesc[256] = "";
+
+    // Estado da seleção
+    int _newMovesetCategoryIndex = 0;  // Índice para o combo de categorias
+    bool _newMovesetIsBFCO = false;
+
+    struct CreatorSubAnimationInstance {
+        const SubAnimationDef* sourceDef;  // Ponteiro para a definição original
+        std::array<char, 128> editedName;  // Nome editável
+
+        // Flags para todas as checkboxes
+        bool pFront = false, pBack = false, pLeft = false, pRight = false;
+        bool pFrontRight = false, pFrontLeft = false, pBackRight = false, pBackLeft = false;
+        bool pRandom = false, pDodge = false;
+    };
+    struct StanceContent {
+        std::vector<CreatorSubAnimationInstance> subMovesets;
+    };
+    std::array<StanceContent, 4> _newMovesetStances;
+    std::array<bool, 4> _newMovesetStanceEnabled = {true, true, true, true};  // Para habilitar/desabilitar stances
+
+    // Ponteiros para gerenciar o modal de adição
+    StanceContent* _stanceToAddTo = nullptr;
 };
 
 struct FileSaveConfig {
