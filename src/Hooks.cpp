@@ -56,6 +56,7 @@ void ProcessCycleDarFile(const std::filesystem::path& cycleDarJsonPath) {
         return;
     }
 
+
     // 4. Constrói os caminhos
     std::string relativePath = doc["pathDar"].GetString();
     std::filesystem::path sourcePath = "Data" / std::filesystem::path(relativePath);
@@ -105,6 +106,44 @@ void ProcessCycleDarFile(const std::filesystem::path& cycleDarJsonPath) {
     }
 
     SKSE::log::info("Cópia concluída. {} arquivos movidos.", filesCopied);
+
+    // >>> INÍCIO DA ADIÇÃO 1: LÓGICA DE CONVERSÃO PARA BFCO <<<
+    bool shouldConvertToBFCO = false;
+    if (doc.HasMember("convertBFCO") && doc["convertBFCO"].IsBool()) {
+        shouldConvertToBFCO = doc["convertBFCO"].GetBool();
+    }
+
+    if (shouldConvertToBFCO && filesCopied > 0) {
+        SKSE::log::info("Iniciando conversão de MCO para BFCO...");
+        int filesRenamed = 0;
+        for (const auto& fileEntry : std::filesystem::directory_iterator(destinationPath)) {
+            if (fileEntry.is_regular_file()) {
+                std::string filename = fileEntry.path().filename().string();
+                std::string lowerFilename = filename;
+                std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(),
+                               [](unsigned char c) { return std::tolower(c); });
+
+                if (lowerFilename.find("mco_") != std::string::npos) {
+                    std::string newFilename = filename;
+                    // Substitui a primeira ocorrência de "mco_" por "BFCO_"
+                    size_t pos = newFilename.find("mco_");
+                    if (pos != std::string::npos) {
+                        newFilename.replace(pos, 4, "BFCO_");
+
+                        std::filesystem::path newFilePath = destinationPath / newFilename;
+                        try {
+                            std::filesystem::rename(fileEntry.path(), newFilePath);
+                            filesRenamed++;
+                        } catch (const std::filesystem::filesystem_error& e) {
+                            SKSE::log::error("Falha ao renomear {} para {}. Erro: {}", fileEntry.path().string(),
+                                             newFilePath.string(), e.what());
+                        }
+                    }
+                }
+            }
+        }
+        SKSE::log::info("Conversão BFCO concluída. {} arquivos renomeados.", filesRenamed);
+    }
 
     // 6. Atualiza o JSON e salva no arquivo
     if (doc.HasMember("conversionDone")) {
@@ -362,7 +401,7 @@ void AnimationManager::DrawAddModModal() {
 
     // Modal LOC("add_moveset") (sem alterações, já estava correto)
     if (ImGui::BeginPopupModal(LOC("add_moveset"), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("Biblioteca de Movesets");
+        ImGui::Text(LOC("library"));
         ImGui::Separator();
         ImGui::InputText("Filter", _movesetFilter, 128);
         if (ImGui::BeginChild("BibliotecaMovesets", ImVec2(modal_list_size), true)) {
@@ -402,7 +441,7 @@ void AnimationManager::DrawAddModModal() {
     // Modal LOC("add_animation") (COM AS CORREÇÕES)
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     if (ImGui::BeginPopupModal(LOC("add_animation"), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("Biblioteca de Animações");
+        ImGui::Text(LOC("library"));
         ImGui::Separator();
         ImGui::InputText("Filter", _subMovesetFilter, 128);
 
@@ -447,7 +486,7 @@ void AnimationManager::DrawAddModModal() {
                                 ImVec2 content_avail;
                                 ImGui::GetContentRegionAvail(&content_avail);  // Pega a região disponível
 
-                                if (ImGui::Button("Adicionar", ImVec2(button_width, 0))) {
+                                if (ImGui::Button(LOC("add_moveset"), ImVec2(button_width, 0))) {
                                     SubAnimationInstance newSubInstance;
                                     newSubInstance.sourceModIndex = modIdx;
                                     newSubInstance.sourceSubAnimIndex = subAnimIdx;
@@ -497,10 +536,10 @@ void AnimationManager::DrawMainMenu() {
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem(LOC("tab_user_movesets"))) {
-            DrawUserMovesetManager();  // Chama a UI da segunda aba
-            ImGui::EndTabItem();
-        }
+        //if (ImGui::BeginTabItem(LOC("tab_user_movesets"))) {
+        //    DrawUserMovesetManager();  // Chama a UI da segunda aba
+        //    ImGui::EndTabItem();
+        //}
         ImGui::EndTabBar();
     }
 
@@ -1138,7 +1177,7 @@ void AnimationManager::SaveAllSettings() {
     RE::DebugNotification("Todas as configurações foram salvas!");
     UpdateMaxMovesetCache();
 
-    RecarregarAnimacoesOAR();
+    //RecarregarAnimacoesOAR();
     _showRestartPopup = true;
 }
 

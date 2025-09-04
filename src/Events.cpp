@@ -67,9 +67,7 @@ namespace MyMenu {
                     ImGui::SetTooltip(LOC("tooltip_cycle_timer"));
                 }
 
-                if (settings_changed) {
-                    MyMenu::SaveSettings();
-                }
+                
                 if (ImGui::Checkbox(
                         "Show menu",
                         &Settings::ShowMenu)) {  // Supondo que você adicionará a tradução LOC("option_random_cycle")
@@ -78,6 +76,9 @@ namespace MyMenu {
                                                    Settings::ShowMenu ? "Cycle Movesets" : "Cycle Movesets_hidden")) {
                         logger::error("Falha ao solicitar o tema");
                     }
+                }
+                if (settings_changed) {
+                    MyMenu::SaveSettings();
                 }
                 ImGui::EndTabItem();
             }

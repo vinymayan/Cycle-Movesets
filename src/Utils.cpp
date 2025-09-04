@@ -147,11 +147,15 @@ void InputListener::UpdateDirectionalState() {
         // Aqui você enviaria o valor para sua animação, por exemplo:
         // RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("MinhaVariavelDirecional",
         // directionalState );
-        if (GlobalControl::g_isWeaponDrawn) {
-            // Reenvia os prompts de moveset e stance para a API para forçar a atualização visual.
+        if (GlobalControl::g_isWeaponDrawn && !GlobalControl::MovesetChangesOpen && !GlobalControl::StanceChangesOpen) {
             SkyPromptAPI::SendPrompt(GlobalControl::MovesetSink::GetSingleton(), GlobalControl::g_clientID);
-            SkyPromptAPI::SendPrompt(GlobalControl::StancesSink::GetSingleton(), GlobalControl::g_clientID);
             SKSE::log::info("SkyPrompt reenviado devido à mudança de direção.");
+            
+        }
+        if (GlobalControl::g_isWeaponDrawn && GlobalControl::MovesetChangesOpen && !GlobalControl::StanceChangesOpen) {
+            SkyPromptAPI::SendPrompt(GlobalControl::MovesetChangesSink::GetSingleton(), GlobalControl::g_clientID);
+            
+            SKSE::log::info("SkyPrompt reenviado devido à mudança de direção e menu aberto.");
         }
     }
     RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("DirecionalCycleMoveset", directionalState);
@@ -278,8 +282,9 @@ void GlobalControl::StancesSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
 
     switch (eventype) {
         case SkyPromptAPI::kAccepted:
-                if(!except) {
+            if(!except) {
                 except = true;
+                GlobalControl::StanceChangesOpen = true;
                 SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
                 SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
                 if (!SkyPromptAPI::SendPrompt(StancesChangesSink::GetSingleton(), g_clientID)) {
@@ -290,6 +295,7 @@ void GlobalControl::StancesSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
                 
         case SkyPromptAPI::kUp:
             except = false;
+            GlobalControl::StanceChangesOpen = false;
             SkyPromptAPI::RemovePrompt(StancesChangesSink::GetSingleton(), GlobalControl::g_clientID);
             if (SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID)){}
             if (!SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), GlobalControl::g_clientID)) {
@@ -325,47 +331,55 @@ std::span<const SkyPromptAPI::Prompt> GlobalControl::StancesChangesSink::GetProm
     return prompts; }
 
 void GlobalControl::StancesChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
-    if (event.type != SkyPromptAPI::PromptEventType::kAccepted) {
-        return;
-    }
+    
     switch (event.type) {
+        case SkyPromptAPI::kAccepted:
+            if (event.prompt.eventID == 2) {
+                g_currentStance -= 1;
+                if (g_currentStance < 1) {
+                    g_currentStance = 4;  // Vai para o último
+                }
+                UpdateSkyPromptTexts();
+                SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::SendPrompt(StancesChangesSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
+                break;
+            }
+            if (event.prompt.eventID == 3) {
+                g_currentStance += 1;
+                if (g_currentStance > 4) {
+                    g_currentStance = 1;  // Volta para o primeiro
+                }
+                UpdateSkyPromptTexts();
+                SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::SendPrompt(StancesChangesSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
+                break;
+            }
         case SkyPromptAPI::kTimeout:
             SkyPromptAPI::SendPrompt(StancesChangesSink::GetSingleton(), g_clientID);
             break;
-    }
-    switch (event.prompt.eventID) {
-        case 2:  // stance anterior
-            g_currentStance -= 1;
-            if (g_currentStance < 1) {
-                g_currentStance = 4;  // Vai para o último
+        case SkyPromptAPI::kUp:
+            if (event.prompt.eventID == 0) {
+                GlobalControl::StanceChangesOpen = false;
+                SkyPromptAPI::RemovePrompt(StancesChangesSink::GetSingleton(), GlobalControl::g_clientID);
+                if (SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID)) {
+                }
+                if (!SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), GlobalControl::g_clientID)) {
+                    logger::error("Skyprompt didnt worked Moveset Sink");
+                }
             }
-            logger::info("stance foi para: {}", g_currentStance);
-            //RE::DebugNotification(std::format("Variavel: {}", stance).c_str());
             break;
-
-        case 3:  // Proximo stance
-            g_currentStance += 1;
-            if (g_currentStance > 4) {
-                g_currentStance = 1;  // Volta para o primeiro
-            }
-            logger::info("stance aumentou para: {}", g_currentStance);
-            //RE::DebugNotification(std::format("Variavel: {}", stance).c_str());
-            break;
-
-
     }
+
     // REQUERIMENTO 5: Mostra a nova contagem (x/y) imediatamente
+    GlobalControl::StanceChangesOpen = true;
     logger::info("O valor de MovesetText é: {}", MovesetText);
     g_currentMoveset = 1;
     RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", g_currentMoveset);
-    RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("cycle_instance", g_currentStance);
-
-    UpdateSkyPromptTexts();
-    SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
-    SkyPromptAPI::SendPrompt(StancesChangesSink::GetSingleton(), g_clientID);
-    SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
-    SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
-    
+    RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("cycle_instance", g_currentStance);  
 }
 
 std::span<const SkyPromptAPI::Prompt> GlobalControl::MovesetSink::GetPrompts() const {
@@ -381,6 +395,7 @@ void GlobalControl::MovesetSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
         case SkyPromptAPI::kAccepted:
             if (!except) {
                 except = true;
+                GlobalControl::MovesetChangesOpen = true;
                 SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), GlobalControl::g_clientID);
                 SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), GlobalControl::g_clientID);
                 if (!SkyPromptAPI::SendPrompt(MovesetChangesSink::GetSingleton(), GlobalControl::g_clientID)) {
@@ -390,6 +405,7 @@ void GlobalControl::MovesetSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
             }
         case SkyPromptAPI::kUp:
             except = false;
+            GlobalControl::MovesetChangesOpen = false;
             SkyPromptAPI::RemovePrompt(MovesetChangesSink::GetSingleton(), GlobalControl::g_clientID);
             SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
             SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
@@ -407,10 +423,6 @@ std::span<const SkyPromptAPI::Prompt> GlobalControl::MovesetChangesSink::GetProm
     
 
 void GlobalControl::MovesetChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent event) const {
-    if (event.type != SkyPromptAPI::PromptEventType::kAccepted) {
-        return;
-    }
-
 
     // REQUERIMENTO 1, 2, 3: Pegar todas as informações necessárias
     std::string category = GetCurrentWeaponCategoryName();
@@ -420,45 +432,54 @@ void GlobalControl::MovesetChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent e
 
     // Se não há movesets configurados para esta stance/arma, não faz nada.
     if (maxMovesets <= 0) {
-        RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone",
-                                                                   0);  // Garante que nenhuma animação toque
+        RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone",0);  // Garante que nenhuma animação toque
         return;
     }
+
+    logger::info("before kup");
     switch (event.type) {
+        case SkyPromptAPI::kAccepted:
+            if (event.prompt.eventID == 2) {
+                g_currentMoveset -= 1;
+                if (g_currentMoveset < 1) {
+                    g_currentMoveset = maxMovesets;  // Vai para o último
+                }
+                UpdateSkyPromptTexts();
+                logger::info("teste {}", MovesetText);
+                RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", g_currentMoveset);
+                SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::SendPrompt(MovesetChangesSink::GetSingleton(), g_clientID);
+                break;
+            }
+            if (event.prompt.eventID == 3) {
+                g_currentMoveset += 1;
+                if (g_currentMoveset > maxMovesets) {
+                    g_currentMoveset = 1;  // Volta para o primeiro
+                }
+                UpdateSkyPromptTexts();
+                logger::info("teste {}", MovesetText);
+                RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", g_currentMoveset);
+                SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::SendPrompt(MovesetChangesSink::GetSingleton(), g_clientID);
+                break;
+            }
         case SkyPromptAPI::kTimeout:
             SkyPromptAPI::SendPrompt(MovesetChangesSink::GetSingleton(), g_clientID);
             break;
+        case SkyPromptAPI::kUp:
+            if (event.prompt.eventID == 1) {
+                GlobalControl::MovesetChangesOpen = false;
+                SkyPromptAPI::RemovePrompt(MovesetChangesSink::GetSingleton(), GlobalControl::g_clientID);
+                if (SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID)) {
+                }
+                if (!SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), GlobalControl::g_clientID)) {
+                    logger::error("Skyprompt didnt worked Moveset Sink");
+                }
+            }
+            logger::info("kUp aceito");
+            break;
     }
-    switch (event.prompt.eventID) {
-        case 2:  // Moveset anterior
-            g_currentMoveset -= 1;
-            if (g_currentMoveset < 1) {
-                g_currentMoveset = maxMovesets;  // Vai para o último
-            }
-            logger::info("Variavel Global diminuiu para: {}", g_currentMoveset);
-            //RE::DebugNotification(std::format("Variavel: {}", cycleplayer).c_str());
-            
-            break;
-
-        case 3:  // Proximo moveset
-            g_currentMoveset += 1;
-            if (g_currentMoveset > maxMovesets) {
-                g_currentMoveset = 1;  // Volta para o primeiro
-            }
-            logger::info("Variavel Global aumentou para: {}", g_currentMoveset);
-            
-            //RE::DebugNotification(std::format("Variavel: {}", cycleplayer).c_str());
-            break;
-
     
-
-    }
-    UpdateSkyPromptTexts();
-    logger::info("teste {}", MovesetText);
-    RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", g_currentMoveset);
-    SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
-    SkyPromptAPI::SendPrompt(MovesetChangesSink::GetSingleton(), g_clientID);
-
 }
 
 RE::BSEventNotifyControl GlobalControl::CameraChange::ProcessEvent(const SKSE::CameraEvent* a_event,

@@ -124,9 +124,6 @@ SKSEPluginLoad(const SKSE::LoadInterface *skse) {
         SKSE::log::info("Ouvinte de eventos de acao registrado com sucesso!");
     }
 
-     // 1. Escaneia os arquivos de animação para carregar os dados.
-
-    // 2. ALTERAÇÃO AQUI: Chame a função para registrar o menu no framework.
     UI::RegisterMenu();
 
 

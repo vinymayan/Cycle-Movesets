@@ -24,6 +24,9 @@ namespace GlobalControl {
     inline SkyPromptAPI::ClientID g_clientID = 0;
     inline bool g_isWeaponDrawn = false;
     inline bool Cycleopen = false;
+    inline bool MovesetChangesOpen = false;
+    inline bool StanceChangesOpen = false;
+    
   
     inline std::string StanceText = "Stance Menu";
     inline std::string MovesetText = "Moveset Menu";
