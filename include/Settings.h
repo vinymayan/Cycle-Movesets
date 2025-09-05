@@ -53,9 +53,11 @@ struct CategoryInstance {
 struct WeaponCategory {
     std::string name;
     double equippedTypeValue;
+    double leftHandEquippedTypeValue = -1.0;
     int activeInstanceIndex = 0;
     bool isDualWield = false;
     std::vector<std::string> keywords;
+    std::vector<std::string> leftHandKeywords;
     std::array<CategoryInstance, 4> instances;
     // --- NOVO ---
     // Armazena os nomes customizados das stances

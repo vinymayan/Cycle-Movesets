@@ -234,19 +234,22 @@ void AnimationManager::ScanAnimationMods() {
     struct CategoryDefinition {
         std::string name;
         double typeValue;
+        double leftHandTypeValue = -1.0;
         bool isDual;
         std::vector<std::string> keywords;
+        std::vector<std::string> leftHandKeywords;
     };
 
     std::vector<CategoryDefinition> categoryDefinitions = {
-        {"Swords", 1.0, false, {}},
-        {"Daggers", 2.0, false, {}},
-        {"War Axes", 3.0, false, {}},
-        {"Maces", 4.0, false, {}}, 
-        {"Greatswords", 5.0, false, {}},
+        {"Swords", 1.0, 0.0, false, {}, {}},
+        {"Sword & Shield", 1.0, 11.0, false, {}, {}},
+        {"Daggers", 2.0, 0.0, false, {}, {}},
+        {"War Axes", 3.0, 0.0, false, {}, {}},
+        {"Maces", 4.0, 0.0, false, {}, {}},
+        {"Greatswords", 5.0, -1.0, false, {}, {}},
         //{"Bows", 7.0, false, {}},
-        {"Battleaxes", 6.0, false, {}},
-        {"Warhammers", 10.0, false, {}},
+        {"Battleaxes", 6.0, -1.0, false, {}, {}},
+        {"Warhammers", 10.0, -1.0, false, {}, {}},
 
                                                           
         /*{"Alteration Spell", 12.0, false, {"MagicAlteration"}},
@@ -255,14 +258,14 @@ void AnimationManager::ScanAnimationMods() {
         {"Magic", 14.0, false, {}},
         {"Conjuration Spell", 15.0, false, {"MagicConjuration"}},
         {"Restoration Spell", 16.0, false, {"MagicRestoration"}},*/
-        {"Katanas", 1.0, false, {"OCF_WeapTypeKatana1H","WeapTypeKatana"}},
-        {"Claws", 2.0, false, {"OCF_WeapTypeClaws1H","WeapTypeClaw"}},
-        {"Pike", 5.0, false, {"OCF_WeapTypePike2H", "WeapTypePike"}},
-        {"Twinblades", 5.0, false, {"OCF_WeapTypeTwinblade2H", "WeapTypePike"}},
-        {"Halberd", 6.0, false, {"OCF_WeapTypeHalberd2H", "WeapTypeHalberd"}},
-        {"Quarterstaff", 10.0, false, {"OCF_WeapTypeHalberd2H", "WeapTypeQtrStaff"}},
-        {"Rapier", 1.0, false, {"OCF_WeapTypeRapier1H", "WeapTypeRapier"}},
-        {"Whip", 4.0, false, {"OCF_WeapTypeWhip1H", "WeapTypeWhip"}},
+        {"Katanas", 1.0, 0.0, false, {"OCF_WeapTypeKatana1H", "WeapTypeKatana"}, {}},
+        {"Claws", 2.0, 0.0, false, {"OCF_WeapTypeClaws1H", "WeapTypeClaw"}, {}},
+        {"Pike", 5.0, -1.0, false, {"OCF_WeapTypePike2H", "WeapTypePike"}, {}},
+        {"Twinblades", 5.0, -1.0, false, {"OCF_WeapTypeTwinblade2H", "WeapTypePike"}, {}},
+        {"Halberd", 6.0, -1.0, false, {"OCF_WeapTypeHalberd2H", "WeapTypeHalberd"}, {}},
+        {"Quarterstaff", 10.0, -1.0, false, {"OCF_WeapTypeHalberd2H", "WeapTypeQtrStaff"}, {}},
+        {"Rapier", 1.0, 0.0, false, {"OCF_WeapTypeRapier1H", "WeapTypeRapier"}, {}},
+        {"Whip", 4.0, 0.0, false, {"OCF_WeapTypeWhip1H", "WeapTypeWhip"}, {}},
                                                            
 
         // CATEGORIAS DUAL WIELD
@@ -272,22 +275,24 @@ void AnimationManager::ScanAnimationMods() {
         {"Destruction Spells", 14.0, true, {"MagicDestruction"}},
         {"Conjuration Spells", 15.0, true, {"MagicConjuration"}},
         {"Restoration Spells", 16.0, true, {"MagicRestoration"}},*/
-        {"Dual Swords", 1.0, true, {}},
-        {"Dual Daggers", 2.0, true, {}},
-        {"Dual War Axes", 3.0, true, {}},
-        {"Dual Maces", 4.0, true, {}},
-        {"Dual Katanas", 1.0, true, {"OCF_WeapTypeKatana1H", "WeapTypeKatana"}},
-        {"Dual Rapier", 1.0, true, {"OCF_WeapTypeRapier1H", "WeapTypeRapier"}},
-        {"Dual Claws", 2.0, true, {"OCF_WeapTypeClaws1H", "WeapTypeClaw"}},
+        {"Dual Swords", 1.0, 1.0, true, {}, {}},
+        {"Dual Daggers", 2.0, 2.0, true, {}, {}},
+        {"Dual War Axes", 3.0, 3.0, true, {}, {}},
+        {"Dual Maces", 4.0, 4.0, true, {}, {}},
+        {"Dual Katanas", 1.0, 1.0, true, {"OCF_WeapTypeKatana1H", "WeapTypeKatana"}, {"OCF_WeapTypeKatana1H", "WeapTypeKatana"}},
+        {"Dual Rapier", 1.0, 1.0, true, {"OCF_WeapTypeRapier1H", "WeapTypeRapier"}, {"OCF_WeapTypeRapier1H", "WeapTypeRapier"}},
+        {"Dual Claws", 2.0, 2.0, true, {"OCF_WeapTypeClaws1H", "WeapTypeClaw"}, {"OCF_WeapTypeClaws1H", "WeapTypeClaw"}},
 
-        {"Unarmed", 0.0, true, {}}};
+        {"Unarmed", 0.0, 0.0, true, {}, {}}};
 
 
     for (const auto& def : categoryDefinitions) {
         _categories[def.name].name = def.name;
         _categories[def.name].equippedTypeValue = def.typeValue;
+        _categories[def.name].leftHandEquippedTypeValue = def.leftHandTypeValue;
         _categories[def.name].isDualWield = def.isDual;
         _categories[def.name].keywords = def.keywords;
+        _categories[def.name].leftHandKeywords = def.leftHandKeywords;
 
         // --- NOVO: Inicializa os nomes e buffers das stances ---
         for (int i = 0; i < 4; ++i) {
@@ -1435,32 +1440,35 @@ void AnimationManager::UpdateOrCreateJson(const std::filesystem::path& jsonPath,
             AddKeywordOrConditions(andConditions, config.category->keywords, false, allocator);
             AddCompetingKeywordExclusions(andConditions, config.category, false, allocator);
 
+            if (!config.category->leftHandKeywords.empty()) {
+                // Adiciona as condições de keyword requeridas para a mão esquerda
+                AddKeywordOrConditions(andConditions, config.category->leftHandKeywords, true,
+                                       allocator);  // 'true' para Left Hand
+
+                // Adiciona as exclusões de keywords concorrentes para a mão esquerda
+                AddCompetingKeywordExclusions(andConditions, config.category, true,
+                                              allocator);  // 'true' para Left Hand
+            }
             // NOVA LÓGICA PARA MÃO ESQUERDA (DUAL WIELD vs UMA MÃO)
-            if (config.category->isDualWield) {
-                // Mão esquerda deve ter o mesmo tipo de arma
+            if (config.category->leftHandEquippedTypeValue >= 0.0) {
                 rapidjson::Value equippedTypeL(rapidjson::kObjectType);
                 equippedTypeL.AddMember("condition", "IsEquippedType", allocator);
                 rapidjson::Value typeValL(rapidjson::kObjectType);
-                typeValL.AddMember("value", config.category->equippedTypeValue, allocator);
-                equippedTypeL.AddMember("Type", typeValL, allocator).AddMember("Left hand", true, allocator);
+                typeValL.AddMember("value", config.category->leftHandEquippedTypeValue,
+                                    allocator);  // Usa o novo valor
+                equippedTypeL.AddMember("Type", typeValL, allocator);
+                equippedTypeL.AddMember("Left hand", true, allocator);
                 andConditions.PushBack(equippedTypeL, allocator);
-
-                // E também deve ter a mesma keyword (se aplicável)
-                AddKeywordOrConditions(andConditions, config.category->keywords, false, allocator);
-                AddCompetingKeywordExclusions(andConditions, config.category, false, allocator);
-                // E não deve ter as keywords concorrentes
-
-            } else {
-                // Para armas de uma mão (não-dual), a mão esquerda deve estar vazia
-                if (config.category->equippedTypeValue >= 1.0 && config.category->equippedTypeValue <= 4.0 ||
-                    !config.category->keywords.empty()) {
-                    rapidjson::Value equippedTypeL(rapidjson::kObjectType);
-                    equippedTypeL.AddMember("condition", "IsEquippedType", allocator);
-                    rapidjson::Value typeValL(rapidjson::kObjectType);
-                    typeValL.AddMember("value", 0.0, allocator);  // 0.0 = Unarmed
-                    equippedTypeL.AddMember("Type", typeValL, allocator).AddMember("Left hand", true, allocator);
-                    andConditions.PushBack(equippedTypeL, allocator);
+                   // Se a categoria for dual wield do mesmo tipo, também verifica keywords na mão esquerda.
+                  if (config.category->isDualWield &&
+                       config.category->equippedTypeValue == config.category->leftHandEquippedTypeValue) {
+                    AddKeywordOrConditions(andConditions, config.category->keywords, true,
+                                            allocator);  // 'true' para Left Hand
+                    AddCompetingKeywordExclusions(andConditions, config.category, true,
+                                                   allocator);  // 'true' para Left Hand
+                    
                 }
+                
             }
 
             AddCompareValuesCondition(andConditions, "cycle_instance", config.instance_index, allocator);
@@ -1842,6 +1850,7 @@ void AnimationManager::SaveCycleMovesets() {
                 for (const auto& modInst : instance.modInstances) {
                     if (!modInst.isSelected) continue;
                     const auto& sourceMod = _allMods[modInst.sourceModIndex];
+                    int animationIndexCounter = 1;
                     for (const auto& subInst : modInst.subAnimationInstances) {
                         if (!subInst.isSelected) continue;
 
@@ -1913,7 +1922,7 @@ void AnimationManager::SaveCycleMovesets() {
 
                         rapidjson::Value& animationsArray = (*stanceObj)["animations"];
                         rapidjson::Value animObj(rapidjson::kObjectType);
-                        animObj.AddMember("index", 1, allocator);
+                        animObj.AddMember("index", animationIndexCounter++, allocator);
                         animObj.AddMember("sourceModName", rapidjson::Value(animOriginMod.name.c_str(), allocator),
                                           allocator);
                         animObj.AddMember("sourceSubName", rapidjson::Value(animOriginSub.name.c_str(), allocator),
@@ -1972,15 +1981,23 @@ void AnimationManager::SaveCycleMovesets() {
 }
 
 // VERSÃO CORRIGIDA E FUNCIONAL
+// SUBSTITUA a função inteira por esta versão corrigida
+// SUBSTITUA a função inteira por esta versão corrigida e aprimorada
 void AnimationManager::LoadCycleMovesets() {
     SKSE::log::info("Iniciando carregamento descentralizado de arquivos CycleMoveset.json...");
 
+    // Limpa as instâncias existentes antes de carregar
     for (auto& pair : _categories) {
         for (auto& instance : pair.second.instances) instance.modInstances.clear();
     }
     for (auto& pair : _npcCategories) {
         for (auto& instance : pair.second.instances) instance.modInstances.clear();
     }
+
+    // >>> CORREÇÃO: Buffer temporário para coletar e ordenar os sub-movesets <<<
+    // A chave externa é o ModInstance ao qual os sub-movesets pertencem.
+    // A chave interna (no std::map) é o 'index' do JSON, que ordena automaticamente as entradas.
+    std::map<ModInstance*, std::map<int, SubAnimationInstance>> loadingBuffer;
 
     const std::filesystem::path oarRootPath = "Data\\meshes\\actors\\character\\animations\\OpenAnimationReplacer";
     if (!std::filesystem::exists(oarRootPath)) {
@@ -2060,12 +2077,14 @@ void AnimationManager::LoadCycleMovesets() {
                             }
 
                             if (stanceJson.HasMember("animations") && stanceJson["animations"].IsArray()) {
-                                // CORREÇÃO DO WARNING: usar a variável animJson
                                 for (const auto& animJson : stanceJson["animations"].GetArray()) {
+                                    if (!animJson.IsObject() || !animJson.HasMember("index")) continue;
+
+                                    // >>> CORREÇÃO: Ler o índice do JSON <<<
+                                    int animIndex = animJson["index"].GetInt();
+
                                     SubAnimationInstance newSubInstance;
 
-                                    // Preenchendo a SubAnimationInstance a partir do animJson...
-                                    // (Esta parte do seu código original estava faltando, adicionei de volta)
                                     std::string subModName = animJson["sourceModName"].GetString();
                                     std::string subAnimName = animJson["sourceSubName"].GetString();
 
@@ -2076,9 +2095,13 @@ void AnimationManager::LoadCycleMovesets() {
                                         if (subAnimIdxOpt) {
                                             newSubInstance.sourceSubAnimIndex = *subAnimIdxOpt;
                                         } else {
+                                            SKSE::log::warn("Sub-moveset '{}' não encontrado no mod '{}'. Pulando.",
+                                                            subAnimName, subModName);
                                             continue;
                                         }
                                     } else {
+                                        SKSE::log::warn("Mod '{}' para o sub-moveset não encontrado. Pulando.",
+                                                        subModName);
                                         continue;
                                     }
 
@@ -2101,7 +2124,8 @@ void AnimationManager::LoadCycleMovesets() {
                                     if (animJson.HasMember("pDodge"))
                                         newSubInstance.pDodge = animJson["pDodge"].GetBool();
 
-                                    modInstancePtr->subAnimationInstances.push_back(newSubInstance);
+                                    // >>> CORREÇÃO: Armazenar no buffer em vez de adicionar diretamente <<<
+                                    loadingBuffer[modInstancePtr][animIndex] = newSubInstance;
                                 }
                             }
                         }
@@ -2110,6 +2134,16 @@ void AnimationManager::LoadCycleMovesets() {
             }
         }
     }
+
+    // >>> CORREÇÃO: Após ler todos os arquivos, popular os vetores finais a partir do buffer ordenado <<<
+    for (auto const& [modInstance, sortedAnims] : loadingBuffer) {
+        // Limpa o vetor para garantir que não haja duplicatas de execuções anteriores
+        modInstance->subAnimationInstances.clear();
+        for (auto const& [index, subInstance] : sortedAnims) {
+            modInstance->subAnimationInstances.push_back(subInstance);
+        }
+    }
+
     SKSE::log::info("Carregamento descentralizado concluído. {} arquivos processados.", filesFound);
     UpdateMaxMovesetCache();
 }

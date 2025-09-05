@@ -170,98 +170,81 @@ std::string GetActorWeaponCategoryName(RE::Actor* targetActor) {
     auto leftHand = targetActor->GetEquippedObject(true);
 
     RE::TESObjectWEAP* rightWeapon = rightHand ? rightHand->As<RE::TESObjectWEAP>() : nullptr;
-    RE::TESObjectWEAP* leftWeapon = leftHand ? leftHand->As<RE::TESObjectWEAP>() : nullptr;
+    RE::TESObjectARMO* leftArmor = leftHand ? leftHand->As<RE::TESObjectARMO>() : nullptr;  // Para escudos
 
-    if (!rightWeapon) {
-        if (leftWeapon) {
-            rightWeapon = leftWeapon;
-            leftWeapon = nullptr;
-        } else {
-            return "Unarmed";
+    // Valor padrão para a mão esquerda (0.0 = vazia)
+    double leftHandType = 0.0;
+    if (leftHand) {
+        if (auto leftWeapon = leftHand->As<RE::TESObjectWEAP>()) {
+            leftHandType = static_cast<double>(leftWeapon->GetWeaponType());
+        } else if (auto leftShield = leftHand->As<RE::TESObjectARMO>()) {
+            if (leftShield->IsShield()) {
+                leftHandType = 9.0;  // Usando 9.0 como o tipo para escudos
+            }
         }
     }
 
+    if (!rightWeapon) {
+        // Se a mão direita está vazia, a única categoria possível é Unarmed
+        // (a menos que você crie categorias para magias, etc.)
+        return "Unarmed";
+    }
+
     const auto& allCategories = AnimationManager::GetSingleton()->GetCategories();
-    auto weaponType = rightWeapon->GetWeaponType();
+    double rightHandType = static_cast<double>(rightWeapon->GetWeaponType());
+
+    std::string fallbackCategory = "Unarmed";  // Um fallback caso nenhuma categoria com keyword seja encontrada
 
     for (const auto& pair : allCategories) {
         const WeaponCategory& category = pair.second;
 
-        // Pula se o tipo base não corresponder
-        if (static_cast<double>(weaponType) != category.equippedTypeValue) {
-            continue;
-        }
+        // --- LÓGICA DE MATCHING ---
+        // 1. Verifica se os tipos de equipamento (direita e esquerda) batem com a definição da categoria
+        bool rightHandMatch = (category.equippedTypeValue == rightHandType);
+        bool leftHandMatch =
+            (category.leftHandEquippedTypeValue < 0.0 || category.leftHandEquippedTypeValue == leftHandType);
 
-        // Se a categoria não requer keywords, pulamos para a próxima etapa (fallback)
-        if (category.keywords.empty()) {
-            continue;
-        }
-
-        // ---> INÍCIO DA NOVA LÓGICA DE MÚLTIPLAS KEYWORDS <---
-        bool anyKeywordMatches = false;
-        for (const auto& keyword : category.keywords) {
-            if (rightWeapon->HasKeywordString(keyword)) {
-                anyKeywordMatches = true;  // Encontramos UMA keyword correspondente, já é o suficiente.
-                break;
+        if (rightHandMatch && leftHandMatch) {
+            // 2. Se os tipos batem, verifica as keywords da mão direita
+            bool rightKeywordsMatch = category.keywords.empty();
+            if (!rightKeywordsMatch) {
+                for (const auto& keyword : category.keywords) {
+                    if (rightWeapon->HasKeywordString(keyword)) {
+                        rightKeywordsMatch = true;
+                        break;
+                    }
+                }
             }
-        }
-        // ---> FIM DA NOVA LÓGICA <---
 
-        if (anyKeywordMatches) {
-            if (category.isDualWield) {
-                if (leftWeapon) {
-                    bool anyKeywordMatchesLeft = false;
-                    for (const auto& keyword : category.keywords) {
+            // 3. Verifica as keywords da mão esquerda (se houver alguma definida)
+            bool leftKeywordsMatch = category.leftHandKeywords.empty();
+            if (!leftKeywordsMatch && leftHand) {  // Só checa se a mão esquerda tem algo
+                if (auto leftWeapon = leftHand->As<RE::TESObjectWEAP>()) {
+                    for (const auto& keyword : category.leftHandKeywords) {
                         if (leftWeapon->HasKeywordString(keyword)) {
-                            anyKeywordMatchesLeft = true;  // Encontrou uma na mão esquerda
+                            leftKeywordsMatch = true;
                             break;
                         }
                     }
-                    if (anyKeywordMatchesLeft) {
-                        return category.name;
-                    }
                 }
-            } else {
+                // Se for um escudo ou outro item, ele não terá keywords de arma,
+                // então leftKeywordsMatch continuará 'false' a menos que você adicione lógica para armaduras.
+            }
+
+            // 4. Se tudo bate, encontramos nossa categoria
+            if (rightKeywordsMatch && leftKeywordsMatch) {
+                // Se a categoria não tem keywords (em nenhuma mão), ela é um fallback
+                if (category.keywords.empty() && category.leftHandKeywords.empty()) {
+                    fallbackCategory = category.name;
+                    continue;  // Continua procurando por uma mais específica
+                }
+                // Se tinha keywords e elas bateram, é um match definitivo
                 return category.name;
             }
         }
     }
 
-    // --- LÓGICA ANTIGA (FALLBACK) ---
-    // Se nenhum match por keyword foi encontrado, usamos o tipo de arma base
-
-    // Verifica dual-wield para as categorias base
-    if (leftWeapon) {
-        if (weaponType == RE::WEAPON_TYPE::kOneHandSword) return "Dual Swords";
-        if (weaponType == RE::WEAPON_TYPE::kOneHandDagger) return "Dual Daggers";
-        if (weaponType == RE::WEAPON_TYPE::kOneHandAxe) return "Dual War Axes";
-        if (weaponType == RE::WEAPON_TYPE::kOneHandMace) return "Dual Maces";
-    }
-
-    // Lógica para arma única
-    switch (weaponType) {
-        case RE::WEAPON_TYPE::kOneHandSword:
-            return "Swords";
-        case RE::WEAPON_TYPE::kOneHandDagger:
-            return "Daggers";
-        case RE::WEAPON_TYPE::kOneHandAxe:
-            return "War Axes";
-        case RE::WEAPON_TYPE::kOneHandMace:
-            return "Maces";
-        case RE::WEAPON_TYPE::kTwoHandSword:
-            return "Greatswords";
-        case RE::WEAPON_TYPE::kBow:
-            return "Bows";
-        case RE::WEAPON_TYPE::kTwoHandAxe:
-            // A nova lógica acima já deve ter pego "Warhammers" pela keyword.
-            // Se chegamos aqui, é um Battleaxe genérico.
-            if (rightWeapon->HasKeywordString("WeapTypeWarhammer")) {
-                return "Warhammers";
-            }
-            return "Battleaxes";
-        default:
-            return "Unarmed";
-    }
+    return fallbackCategory;
 }
 
 // NOVA VERSÃO SIMPLIFICADA
