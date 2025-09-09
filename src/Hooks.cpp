@@ -247,43 +247,47 @@ void AnimationManager::ScanAnimationMods() {
         {"War Axes", 3.0, 0.0, false, {}, {}},
         {"Maces", 4.0, 0.0, false, {}, {}},
         {"Greatswords", 5.0, -1.0, false, {}, {}},
-        //{"Bows", 7.0, false, {}},
+
         {"Battleaxes", 6.0, -1.0, false, {}, {}},
         {"Warhammers", 10.0, -1.0, false, {}, {}},
 
-                                                          
-        /*{"Alteration Spell", 12.0, false, {"MagicAlteration"}},
-        {"Illusion Spell", 13.0, false, {"MagicIllusion"}},
-        {"Destruction Spell", 14.0, false, {"MagicDestruction"}},
-        {"Magic", 14.0, false, {}},
-        {"Conjuration Spell", 15.0, false, {"MagicConjuration"}},
-        {"Restoration Spell", 16.0, false, {"MagicRestoration"}},*/
         {"Katanas", 1.0, 0.0, false, {"OCF_WeapTypeKatana1H", "WeapTypeKatana"}, {}},
+        {"Nodachi", 5.0, -1.0, false, {"OCF_WeapTypeKatana1H", "WeapTypeNodachi"}, {}},
         {"Claws", 2.0, 0.0, false, {"OCF_WeapTypeClaws1H", "WeapTypeClaw"}, {}},
         {"Pike", 5.0, -1.0, false, {"OCF_WeapTypePike2H", "WeapTypePike"}, {}},
-        {"Twinblades", 5.0, -1.0, false, {"OCF_WeapTypeTwinblade2H", "WeapTypePike"}, {}},
+        {"Twinblade", 5.0, -1.0, false, {"OCF_WeapTypeTwinblade2H", "WeapTypeTwinblade"}, {}},
         {"Halberd", 6.0, -1.0, false, {"OCF_WeapTypeHalberd2H", "WeapTypeHalberd"}, {}},
-        {"Quarterstaff", 10.0, -1.0, false, {"OCF_WeapTypeHalberd2H", "WeapTypeQtrStaff"}, {}},
+        {"Quarterstaff", 10.0, -1.0, false, {"WeapTypeQtrStaff", "WeapTypeQuarterstaff"}, {}},
         {"Rapier", 1.0, 0.0, false, {"OCF_WeapTypeRapier1H", "WeapTypeRapier"}, {}},
         {"Whip", 4.0, 0.0, false, {"OCF_WeapTypeWhip1H", "WeapTypeWhip"}, {}},
-                                                           
+        {"Javelin", 4.0, 0.0, false, {"WeapTypeJavelin"}, {}},
+        {"Scythe", 4.0, 0.0, false, {"WeapTypeScythe"}, {}},
+        {"Spear", 4.0, 0.0, false, {"WeapTypeSpear"}, {}},
 
         // CATEGORIAS DUAL WIELD
-        
-        /*{"Alteration Spells", 12.0, true, {"MagicAlteration"}},
-        {"Illusion Spells", 13.0, true, {"MagicIllusion"}},
-        {"Destruction Spells", 14.0, true, {"MagicDestruction"}},
-        {"Conjuration Spells", 15.0, true, {"MagicConjuration"}},
-        {"Restoration Spells", 16.0, true, {"MagicRestoration"}},*/
+
         {"Dual Swords", 1.0, 1.0, true, {}, {}},
         {"Dual Daggers", 2.0, 2.0, true, {}, {}},
         {"Dual War Axes", 3.0, 3.0, true, {}, {}},
         {"Dual Maces", 4.0, 4.0, true, {}, {}},
-        {"Dual Katanas", 1.0, 1.0, true, {"OCF_WeapTypeKatana1H", "WeapTypeKatana"}, {"OCF_WeapTypeKatana1H", "WeapTypeKatana"}},
-        {"Dual Rapier", 1.0, 1.0, true, {"OCF_WeapTypeRapier1H", "WeapTypeRapier"}, {"OCF_WeapTypeRapier1H", "WeapTypeRapier"}},
-        {"Dual Claws", 2.0, 2.0, true, {"OCF_WeapTypeClaws1H", "WeapTypeClaw"}, {"OCF_WeapTypeClaws1H", "WeapTypeClaw"}},
-
+        {"Dual Katanas",1.0,1.0,true,{"OCF_WeapTypeKatana1H", "WeapTypeKatana"},{"OCF_WeapTypeKatana1H", "WeapTypeKatana"}},
+        {"Dual Rapier",1.0,1.0,true,{"OCF_WeapTypeRapier1H", "WeapTypeRapier"},{"OCF_WeapTypeRapier1H", "WeapTypeRapier"}},
+        {"Dual Claws",2.0,2.0,true,{"OCF_WeapTypeClaws1H", "WeapTypeClaw"},{"OCF_WeapTypeClaws1H", "WeapTypeClaw"}},
         {"Unarmed", 0.0, 0.0, true, {}, {}}};
+
+    //{"Bows", 7.0, false, {}},
+    /*{"Alteration Spell", 12.0, false, {"MagicAlteration"}},
+    {"Illusion Spell", 13.0, false, {"MagicIllusion"}},
+    {"Destruction Spell", 14.0, false, {"MagicDestruction"}},
+    {"Magic", 14.0, false, {}},
+    {"Conjuration Spell", 15.0, false, {"MagicConjuration"}},
+    {"Restoration Spell", 16.0, false, {"MagicRestoration"}},*/
+    /*{"Alteration Spells", 12.0, true, {"MagicAlteration"}},
+    {"Illusion Spells", 13.0, true, {"MagicIllusion"}},
+    {"Destruction Spells", 14.0, true, {"MagicDestruction"}},
+    {"Conjuration Spells", 15.0, true, {"MagicConjuration"}},
+    {"Restoration Spells", 16.0, true, {"MagicRestoration"}},*/
+
 
 
     for (const auto& def : categoryDefinitions) {
@@ -551,10 +555,10 @@ void AnimationManager::DrawMainMenu() {
             DrawAnimationManager();  // Chama a UI da primeira aba
             ImGui::EndTabItem();
         }
-        //if (ImGui::BeginTabItem(LOC("tab_moveset_creator"))) {
-        //    DrawUserMovesetCreator();  // Chama a nova UI
-        //    ImGui::EndTabItem();
-        //}
+        if (ImGui::BeginTabItem(LOC("tab_moveset_creator"))) {
+            DrawUserMovesetCreator();  // Chama a nova UI
+            ImGui::EndTabItem();
+        }
         //if (ImGui::BeginTabItem(LOC("tab_user_movesets"))) {
         //    DrawUserMovesetManager();  // Chama a UI da segunda aba
         //    ImGui::EndTabItem();
@@ -566,6 +570,7 @@ void AnimationManager::DrawMainMenu() {
     // Ele só será desenhado quando a flag _isAddModModalOpen for verdadeira,
     // mas agora ele não pertence a nenhuma aba específica.
     DrawAddModModal();
+    DrawAddDarModal();
     DrawStanceEditorPopup();
     DrawRestartPopup();
 }
@@ -581,6 +586,10 @@ void AnimationManager::DrawUserMovesetCreator() {
     ImGui::SameLine();
     if (ImGui::Button("Carregar Moveset para Editar")) {
         // LoadUserMoveset(); // Função para o requisito 2.5
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Ler Animações DAR")) {
+        ScanDarAnimations();
     }
     ImGui::Separator();
 
@@ -616,7 +625,14 @@ void AnimationManager::DrawUserMovesetCreator() {
                     _modInstanceToAddTo = nullptr;
                     _userMovesetToAddTo = nullptr;
                 }
-
+                ImGui::SameLine();
+                if (ImGui::Button(std::format("Adicionar Animação (DAR) à Stance {}", i + 1).c_str())) {
+                    _isAddDarModalOpen = true;  // Ativa o novo modal
+                    _stanceToAddTo = &_newMovesetStances[i];
+                    _instanceToAddTo = nullptr;
+                    _modInstanceToAddTo = nullptr;
+                    _userMovesetToAddTo = nullptr;
+                }
                 ImGui::Separator();
 
                 int subToRemove = -1;
@@ -2628,7 +2644,16 @@ void AnimationManager::SaveUserMoveset() {
                 rapidjson::Document cycleDoc;
                 cycleDoc.SetObject();
                 auto& allocator = cycleDoc.GetAllocator();
-                std::string originalPathStr = subInst.sourceDef->path.parent_path().string();
+                std::string originalPathStr;
+                // Se o 'path' do sourceDef aponta para um "config.json", é um sub-moveset OAR.
+                if (subInst.sourceDef->path.filename() == "config.json") {
+                    originalPathStr = subInst.sourceDef->path.parent_path().string();
+                    SKSE::log::info("Gerando CycleDar.json para fonte OAR: {}", originalPathStr);
+                } else {
+                    // Caso contrário, é um sub-moveset DAR, e o 'path' já é a pasta correta.
+                    originalPathStr = subInst.sourceDef->path.string();
+                    SKSE::log::info("Gerando CycleDar.json para fonte DAR: {}", originalPathStr);
+                }
                 size_t pos = originalPathStr.find("Data\\");
                 if (pos != std::string::npos) {
                     originalPathStr = originalPathStr.substr(pos + 5);
@@ -2655,4 +2680,159 @@ void AnimationManager::SaveUserMoveset() {
     SKSE::log::info("Salvamento do moveset '{}' concluído.", movesetName);
     RE::DebugNotification(std::format("Moveset '{}' salvo com sucesso!", movesetName).c_str());
 
+}
+
+// =================================================================================
+// NOVA FUNÇÃO: Escaneia o diretório do DAR em busca de pastas de animação
+// =================================================================================
+// =================================================================================
+// NOVA VERSÃO COM LOGS DETALHADOS PARA DEPURAÇÃO
+// =================================================================================
+void AnimationManager::ScanDarAnimations() {
+    SKSE::log::info("[ScanDarAnimations] Iniciando a função de escaneamento DAR.");
+    try {
+        _darSubMovesets.clear();
+        SKSE::log::info("[ScanDarAnimations] Vetor _darSubMovesets foi limpo.");
+
+        const std::filesystem::path darRootPath =
+            "Data\\meshes\\actors\\character\\animations\\DynamicAnimationReplacer\\_CustomConditions";
+
+        // Convertendo para std::string para o log
+        auto u8_darRootPath = darRootPath.u8string();
+        SKSE::log::info("[ScanDarAnimations] Caminho a ser verificado: {}",
+                        std::string(u8_darRootPath.begin(), u8_darRootPath.end()));
+
+        if (!std::filesystem::exists(darRootPath) || !std::filesystem::is_directory(darRootPath)) {
+            SKSE::log::warn("[ScanDarAnimations] A pasta raiz do DAR (_CustomConditions) não foi encontrada em '{}'.",
+                            std::string(u8_darRootPath.begin(), u8_darRootPath.end()));
+            RE::DebugNotification("Pasta do DAR (_CustomConditions) não encontrada.");
+            return;
+        }
+
+        SKSE::log::info("[ScanDarAnimations] Pasta encontrada. Iniciando iteração pelas subpastas...");
+        int folderCount = 0;
+        for (const auto& entry : std::filesystem::directory_iterator(darRootPath)) {
+            folderCount++;
+
+            auto u8_entryPath = entry.path().u8string();
+            SKSE::log::info("[ScanDarAnimations] [LOOP {}] Verificando a entrada: '{}'", folderCount,
+                            std::string(u8_entryPath.begin(), u8_entryPath.end()));
+
+            if (entry.is_directory()) {
+                SKSE::log::info("[ScanDarAnimations] [LOOP {}] É um diretório. Processando...", folderCount);
+
+                SubAnimationDef subAnimDef;
+
+                SKSE::log::info("[ScanDarAnimations] [LOOP {}] Extraindo nome da pasta...", folderCount);
+
+                // ===================================================================
+                // CORREÇÃO PRINCIPAL: Converter explicitamente std::u8string para std::string
+                // ===================================================================
+                auto u8_filename = entry.path().filename().u8string();
+                subAnimDef.name = std::string(u8_filename.begin(), u8_filename.end());
+                SKSE::log::info("[ScanDarAnimations] [LOOP {}] Nome extraído: '{}'", folderCount, subAnimDef.name);
+
+                subAnimDef.path = entry.path();
+                auto u8_subAnimPath = subAnimDef.path.u8string();
+                SKSE::log::info("[ScanDarAnimations] [LOOP {}] Path definido como: '{}'", folderCount,
+                                std::string(u8_subAnimPath.begin(), u8_subAnimPath.end()));
+
+                SKSE::log::info("[ScanDarAnimations] [LOOP {}] Chamando ScanSubAnimationFolderForTags para '{}'...",
+                                folderCount, subAnimDef.name);
+                ScanSubAnimationFolderForTags(entry.path(), subAnimDef);
+                SKSE::log::info(
+                    "[ScanDarAnimations] [LOOP {}] Retornou de ScanSubAnimationFolderForTags. A pasta tem animações: "
+                    "{}",
+                    folderCount, subAnimDef.hasAnimations);
+
+                if (subAnimDef.hasAnimations) {
+                    SKSE::log::info("[ScanDarAnimations] [LOOP {}] O submoveset tem animações. Adicionando ao vetor...",
+                                    folderCount);
+                    _darSubMovesets.push_back(subAnimDef);
+                    SKSE::log::info("[ScanDarAnimations] [LOOP {}] Adicionado com sucesso: '{}'", folderCount,
+                                    subAnimDef.name);
+                } else {
+                    SKSE::log::info(
+                        "[ScanDarAnimations] [LOOP {}] O submoveset '{}' não contém arquivos .hkx e será pulado.",
+                        folderCount, subAnimDef.name);
+                }
+            } else {
+                SKSE::log::info("[ScanDarAnimations] [LOOP {}] A entrada não é um diretório. Pulando.", folderCount);
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        SKSE::log::critical("[ScanDarAnimations] CRASH! ERRO DE FILESYSTEM DURANTE O SCAN: {}", e.what());
+        RE::DebugNotification("ERRO GRAVE ao ler pastas DAR! Verifique os logs.");
+    } catch (const std::exception& e) {
+        SKSE::log::critical("[ScanDarAnimations] CRASH! ERRO GERAL DURANTE O SCAN: {}", e.what());
+        RE::DebugNotification("ERRO GRAVE ao ler pastas DAR! Verifique os logs.");
+    } catch (...) {
+        SKSE::log::critical("[ScanDarAnimations] CRASH! ERRO DESCONHECIDO E NÃO IDENTIFICADO DURANTE O SCAN!");
+        RE::DebugNotification("ERRO GRAVE E DESCONHECIDO ao ler pastas DAR! Verifique os logs.");
+    }
+
+    SKSE::log::info("[ScanDarAnimations] Escaneamento finalizado. Total de {} submovesets carregados.",
+                    _darSubMovesets.size());
+    if (!_darSubMovesets.empty()) {
+        RE::DebugNotification(std::format("{} Animações DAR carregadas.", _darSubMovesets.size()).c_str());
+    }
+}
+
+// =================================================================================
+// NOVA FUNÇÃO: Desenha o modal para adicionar animações da biblioteca DAR
+// =================================================================================
+void AnimationManager::DrawAddDarModal() {
+    if (_isAddDarModalOpen) {
+        ImGui::OpenPopup("Adicionar Animação DAR");
+        _isAddDarModalOpen = false;
+    }
+
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const ImVec2 modal_list_size = ImVec2(viewport->Size.x * 0.5f, viewport->Size.y * 0.5f);
+    ImVec2 center = ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f, viewport->Pos.y + viewport->Size.y * 0.5f);
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal("Adicionar Animação DAR", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Biblioteca de Animações DAR");
+        ImGui::Separator();
+        static char darFilter[128] = "";
+        ImGui::InputText("Filtro", darFilter, sizeof(darFilter));
+        ImGui::Separator();
+
+        if (ImGui::BeginChild("BibliotecaDAR", ImVec2(modal_list_size), true)) {
+            std::string filter_str = darFilter;
+            std::transform(filter_str.begin(), filter_str.end(), filter_str.begin(), ::tolower);
+
+            for (size_t i = 0; i < _darSubMovesets.size(); ++i) {
+                const auto& darSubDef = _darSubMovesets[i];
+                std::string name_lower = darSubDef.name;
+                std::transform(name_lower.begin(), name_lower.end(), name_lower.begin(), ::tolower);
+
+                if (filter_str.empty() || name_lower.find(filter_str) != std::string::npos) {
+                    ImGui::PushID(static_cast<int>(i));
+                    if (ImGui::Button("Adicionar")) {
+                        if (_stanceToAddTo) {
+                            CreatorSubAnimationInstance newInstance;
+                            // O ponteiro agora aponta para um elemento no nosso vetor _darSubMovesets
+                            newInstance.sourceDef = &darSubDef;
+                            strcpy_s(newInstance.editedName.data(), newInstance.editedName.size(),
+                                     darSubDef.name.c_str());
+                            _stanceToAddTo->subMovesets.push_back(newInstance);
+                            SKSE::log::info("Adicionando animação DAR '{}' à stance.", darSubDef.name);
+                        }
+                    }
+                    ImGui::SameLine();
+                    ImGui::Text("%s", darSubDef.name.c_str());
+                    ImGui::PopID();
+                }
+            }
+        }
+        ImGui::EndChild();
+        ImGui::Separator();
+        if (ImGui::Button("Fechar", ImVec2(120, 0))) {
+            strcpy_s(darFilter, "");
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
 }

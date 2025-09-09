@@ -23,12 +23,14 @@ public:
     std::string GetCurrentMovesetName(const std::string& categoryName, int stanceIndex, int movesetIndex,
                                       int directionalState);
     bool _showRestartPopup = false; 
+    void ScanDarAnimations();
 
 private:
     std::map<std::string, WeaponCategory> _categories;
     std::map<std::string, WeaponCategory> _npcCategories;
     std::vector<AnimationModDef> _allMods;
-
+    std::vector<SubAnimationDef> _darSubMovesets;
+    bool _isAddDarModalOpen = false;
     // Armazena os caminhos de todos os config.json que nosso manager já tocou.
     std::set<std::filesystem::path> _managedFiles; 
     bool _preserveConditions = false;
@@ -75,6 +77,10 @@ private:
     void DrawRestartPopup();
 
     void SaveUserMoveset();
+
+    
+
+    void DrawAddDarModal();
 
     // --- NOVAS VARIÁVEIS PARA GERENCIAR MOVESETS DO USUÁRIO ---
 
