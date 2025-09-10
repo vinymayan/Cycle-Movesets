@@ -236,57 +236,31 @@ void AnimationManager::ScanAnimationMods() {
         double typeValue;
         double leftHandTypeValue = -1.0;
         bool isDual;
+        bool isShield;
         std::vector<std::string> keywords;
         std::vector<std::string> leftHandKeywords;
     };
 
     std::vector<CategoryDefinition> categoryDefinitions = {
+        // Single-Wield
         {"Swords", 1.0, 0.0, false, {}, {}},
-        {"Sword & Shield", 1.0, 11.0, false, {}, {}},
         {"Daggers", 2.0, 0.0, false, {}, {}},
         {"War Axes", 3.0, 0.0, false, {}, {}},
         {"Maces", 4.0, 0.0, false, {}, {}},
         {"Greatswords", 5.0, -1.0, false, {}, {}},
-
         {"Battleaxes", 6.0, -1.0, false, {}, {}},
         {"Warhammers", 10.0, -1.0, false, {}, {}},
-
-        {"Katanas", 1.0, 0.0, false, {"OCF_WeapTypeKatana1H", "WeapTypeKatana"}, {}},
-        {"Nodachi", 5.0, -1.0, false, {"OCF_WeapTypeKatana1H", "WeapTypeNodachi"}, {}},
-        {"Claws", 2.0, 0.0, false, {"OCF_WeapTypeClaws1H", "WeapTypeClaw"}, {}},
-        {"Pike", 5.0, -1.0, false, {"OCF_WeapTypePike2H", "WeapTypePike"}, {}},
-        {"Twinblade", 5.0, -1.0, false, {"OCF_WeapTypeTwinblade2H", "WeapTypeTwinblade"}, {}},
-        {"Halberd", 6.0, -1.0, false, {"OCF_WeapTypeHalberd2H", "WeapTypeHalberd"}, {}},
-        {"Quarterstaff", 10.0, -1.0, false, {"WeapTypeQtrStaff", "WeapTypeQuarterstaff"}, {}},
-        {"Rapier", 1.0, 0.0, false, {"OCF_WeapTypeRapier1H", "WeapTypeRapier"}, {}},
-        {"Whip", 4.0, 0.0, false, {"OCF_WeapTypeWhip1H", "WeapTypeWhip"}, {}},
-        {"Javelin", 4.0, 0.0, false, {"WeapTypeJavelin"}, {}},
-        {"Scythe", 4.0, 0.0, false, {"WeapTypeScythe"}, {}},
-        {"Spear", 4.0, 0.0, false, {"WeapTypeSpear"}, {}},
-
-        // CATEGORIAS DUAL WIELD
-
+        // Shield
+        {"Shield", -1.0, 11.0, false, {}, {}},
+        // Dual-Wield
         {"Dual Swords", 1.0, 1.0, true, {}, {}},
         {"Dual Daggers", 2.0, 2.0, true, {}, {}},
         {"Dual War Axes", 3.0, 3.0, true, {}, {}},
         {"Dual Maces", 4.0, 4.0, true, {}, {}},
-        {"Dual Katanas",1.0,1.0,true,{"OCF_WeapTypeKatana1H", "WeapTypeKatana"},{"OCF_WeapTypeKatana1H", "WeapTypeKatana"}},
-        {"Dual Rapier",1.0,1.0,true,{"OCF_WeapTypeRapier1H", "WeapTypeRapier"},{"OCF_WeapTypeRapier1H", "WeapTypeRapier"}},
-        {"Dual Claws",2.0,2.0,true,{"OCF_WeapTypeClaws1H", "WeapTypeClaw"},{"OCF_WeapTypeClaws1H", "WeapTypeClaw"}},
-        {"Unarmed", 0.0, 0.0, true, {}, {}}};
+        {"Unarmed", 0.0, 0.0, true, {}, {}}
+    };
 
-    //{"Bows", 7.0, false, {}},
-    /*{"Alteration Spell", 12.0, false, {"MagicAlteration"}},
-    {"Illusion Spell", 13.0, false, {"MagicIllusion"}},
-    {"Destruction Spell", 14.0, false, {"MagicDestruction"}},
-    {"Magic", 14.0, false, {}},
-    {"Conjuration Spell", 15.0, false, {"MagicConjuration"}},
-    {"Restoration Spell", 16.0, false, {"MagicRestoration"}},*/
-    /*{"Alteration Spells", 12.0, true, {"MagicAlteration"}},
-    {"Illusion Spells", 13.0, true, {"MagicIllusion"}},
-    {"Destruction Spells", 14.0, true, {"MagicDestruction"}},
-    {"Conjuration Spells", 15.0, true, {"MagicConjuration"}},
-    {"Restoration Spells", 16.0, true, {"MagicRestoration"}},*/
+    
 
 
 
@@ -295,8 +269,11 @@ void AnimationManager::ScanAnimationMods() {
         _categories[def.name].equippedTypeValue = def.typeValue;
         _categories[def.name].leftHandEquippedTypeValue = def.leftHandTypeValue;
         _categories[def.name].isDualWield = def.isDual;
+        _categories[def.name].isShieldCategory = def.isShield;
         _categories[def.name].keywords = def.keywords;
         _categories[def.name].leftHandKeywords = def.leftHandKeywords;
+        _categories[def.name].isCustom = false;
+        _categories[def.name].baseCategoryName = "Base";
 
         // --- NOVO: Inicializa os nomes e buffers das stances ---
         for (int i = 0; i < 4; ++i) {
@@ -306,6 +283,7 @@ void AnimationManager::ScanAnimationMods() {
                      _categories[def.name].stanceNameBuffers[i].size(), defaultName.c_str());
         }
     }
+    LoadCustomCategories();
     LoadStanceNames();
 
 
@@ -563,6 +541,10 @@ void AnimationManager::DrawMainMenu() {
         //    DrawUserMovesetManager();  // Chama a UI da segunda aba
         //    ImGui::EndTabItem();
         //}
+        if (ImGui::BeginTabItem("Category Manager")) {
+            DrawCategoryManager();
+            ImGui::EndTabItem();
+        }
         ImGui::EndTabBar();
     }
 
@@ -573,6 +555,7 @@ void AnimationManager::DrawMainMenu() {
     DrawAddDarModal();
     DrawStanceEditorPopup();
     DrawRestartPopup();
+    DrawCreateCategoryModal();
 }
 // Nova função para desenhar a interface de criação de movesets
 void AnimationManager::DrawUserMovesetCreator() {
@@ -604,11 +587,6 @@ void AnimationManager::DrawUserMovesetCreator() {
         categoryNames.push_back(pair.first.c_str());
     }
     ImGui::Combo("Categoria de Arma", &_newMovesetCategoryIndex, categoryNames.data(), categoryNames.size());
-
-    // Seleção de Tipo (MCO/BFCO)
-    ImGui::RadioButton("MCO", reinterpret_cast<int*>(&_newMovesetIsBFCO), 0);
-    ImGui::SameLine();
-    ImGui::RadioButton("BFCO", reinterpret_cast<int*>(&_newMovesetIsBFCO), 1);
 
     ImGui::Separator();
     ImGui::Text("Stances e Sub-Movesets");
@@ -647,7 +625,8 @@ void AnimationManager::DrawUserMovesetCreator() {
                     ImGui::InputText("##SubName", subInst.editedName.data(), subInst.editedName.size());
                     ImGui::SameLine();
                     ImGui::Text("<- %s", subInst.sourceDef->name.c_str());
-
+                    ImGui::SameLine();
+                    ImGui::Checkbox("BFCO", &subInst.isBFCO);
                     // ======================= ADIÇÃO DAS CHECKBOXES (Problema 3) =======================
                     ImGui::Indent();  // Adiciona um recuo para as checkboxes
 
@@ -1185,6 +1164,7 @@ void AnimationManager::DrawNPCCategoryUI(WeaponCategory& category) {
 
 void AnimationManager::SaveAllSettings() {
     SKSE::log::info("Iniciando salvamento global de todas as configurações...");
+    SaveCustomCategories();
     SaveStanceNames();
     SaveCycleMovesets();
     SKSE::log::info("Gerando arquivos de condição para OAR...");
@@ -1319,6 +1299,7 @@ void AnimationManager::SaveAllSettings() {
     _showRestartPopup = true;
 }
 
+// Substitua a função inteira por esta
 void AnimationManager::UpdateOrCreateJson(const std::filesystem::path& jsonPath,
                                           const std::vector<FileSaveConfig>& configs) {
     rapidjson::Document doc;
@@ -1337,34 +1318,23 @@ void AnimationManager::UpdateOrCreateJson(const std::filesystem::path& jsonPath,
     if (!doc.IsObject()) doc.SetObject();
     auto& allocator = doc.GetAllocator();
 
-    // ---> INÍCIO DA NOVA LÓGICA DE PRIORIDADE <---
     std::string movesetName = jsonPath.parent_path().filename().string();
     if (doc.HasMember("name")) {
         doc["name"].SetString(movesetName.c_str(), allocator);
     } else {
-        // Adiciona o novo membro. A ordem exata não é garantida, mas não é necessária.
         doc.AddMember("name", rapidjson::Value(movesetName.c_str(), allocator), allocator);
     }
-    // 1. Lê a prioridade base do arquivo. Se não existir, usa um valor padrão (ex: 0).
-    int basePriority = 2000000000;
-    if (doc.HasMember("priority") && doc["priority"].IsInt()) {
-        basePriority;  //= doc["priority"].GetInt();
-    }
 
-    // 2. Determina se esta animação está sendo usada como "mãe" em QUALQUER uma das configurações.
+    int basePriority = 2000000000;
     bool isUsedAsParent = false;
     for (const auto& config : configs) {
         if (config.isParent) {
             isUsedAsParent = true;
-            break;  // Se encontrarmos um uso como "mãe", já podemos parar.
+            break;
         }
     }
-
-    // 3. Define a prioridade final. Se for usada como mãe, mantém a base.
-    //    Se for usada APENAS como filha, incrementa a prioridade para garantir que ela sobrescreva a mãe.
     int finalPriority = isUsedAsParent ? basePriority : basePriority + 1;
 
-    // 4. Aplica a prioridade final ao documento JSON.
     if (doc.HasMember("priority")) {
         doc["priority"].SetInt(finalPriority);
     } else {
@@ -1375,7 +1345,6 @@ void AnimationManager::UpdateOrCreateJson(const std::filesystem::path& jsonPath,
     if (_preserveConditions && doc.HasMember("conditions") && doc["conditions"].IsArray()) {
         for (auto& cond : doc["conditions"].GetArray()) {
             if (cond.IsObject() && cond.HasMember("comment") && cond["comment"] == "OAR_CYCLE_MANAGER_CONDITIONS") {
-                // Pula o nosso próprio bloco ao preservar, pois ele será reescrito
                 continue;
             }
             rapidjson::Value c;
@@ -1399,13 +1368,11 @@ void AnimationManager::UpdateOrCreateJson(const std::filesystem::path& jsonPath,
         conditions.PushBack(oldConditionsBlock, allocator);
     }
 
-    // Passo 1: Mapear todas as direções usadas pelas "filhas" para cada "mãe" (playlist).
-    // A chave do mapa é o 'order_in_playlist', o valor é um set com os números das direções.
     std::map<int, std::set<int>> childDirectionsByPlaylist;
     for (const auto& config : configs) {
         if (!config.isParent) {
             int playlistId = config.order_in_playlist;
-            if (playlistId > 0) {  // Garante que é uma filha de uma playlist válida
+            if (playlistId > 0) {
                 if (config.pFront) childDirectionsByPlaylist[playlistId].insert(1);
                 if (config.pFrontRight) childDirectionsByPlaylist[playlistId].insert(2);
                 if (config.pRight) childDirectionsByPlaylist[playlistId].insert(3);
@@ -1429,6 +1396,7 @@ void AnimationManager::UpdateOrCreateJson(const std::filesystem::path& jsonPath,
             categoryAndBlock.AddMember("condition", "AND", allocator);
             rapidjson::Value andConditions(rapidjson::kArrayType);
 
+            // ActorBase condition
             {
                 rapidjson::Value actorBase(rapidjson::kObjectType);
                 actorBase.AddMember("condition", "IsActorBase", allocator);
@@ -1441,60 +1409,60 @@ void AnimationManager::UpdateOrCreateJson(const std::filesystem::path& jsonPath,
                 actorBase.AddMember("Actor base", actorBaseParams, allocator);
                 andConditions.PushBack(actorBase, allocator);
             }
+
+            // Right-Hand Equipped Type condition
             {
-                rapidjson::Value equippedType(rapidjson::kObjectType);
-                equippedType.AddMember("condition", "IsEquippedType", allocator);
-                rapidjson::Value typeVal(rapidjson::kObjectType);
-                typeVal.AddMember("value", config.category->equippedTypeValue, allocator);
-                equippedType.AddMember("Type", typeVal, allocator);
-                equippedType.AddMember("Left hand", false, allocator);  // Condição da mão direita (sempre presente)
-                andConditions.PushBack(equippedType, allocator);
+                if (config.category->equippedTypeValue < 0.0) {  // Categoria genérica como "Shield"
+                    rapidjson::Value rightHandAndBlock(rapidjson::kObjectType);
+                    rightHandAndBlock.AddMember("condition", "AND", allocator);
+                    rapidjson::Value conditionsForRightHand(rapidjson::kArrayType);
+
+                    rapidjson::Value orBlock(rapidjson::kObjectType);
+                    orBlock.AddMember("condition", "OR", allocator);
+                    rapidjson::Value orConditions(rapidjson::kArrayType);
+                    AddCompareEquippedTypeCondition(orConditions, 1.0, false, allocator);
+                    AddCompareEquippedTypeCondition(orConditions, 2.0, false, allocator);
+                    AddCompareEquippedTypeCondition(orConditions, 3.0, false, allocator);
+                    AddCompareEquippedTypeCondition(orConditions, 4.0, false, allocator);
+                    orBlock.AddMember("Conditions", orConditions, allocator);
+                    conditionsForRightHand.PushBack(orBlock, allocator);
+
+                    // CORREÇÃO #2: A lógica de exclusão para a categoria Shield base agora é chamada corretamente.
+                    AddShieldCategoryExclusions(conditionsForRightHand, allocator);
+
+                    rightHandAndBlock.AddMember("Conditions", conditionsForRightHand, allocator);
+                    andConditions.PushBack(rightHandAndBlock, allocator);
+                } else {  // Caso padrão
+                    AddCompareEquippedTypeCondition(andConditions, config.category->equippedTypeValue, false,
+                                                    allocator);
+                }
             }
 
-            // NOVA LÓGICA DE KEYWORDS
-            // 1. Adiciona a keyword REQUERIDA para esta categoria (se houver)
+            // Right-Hand Keyword conditions
             AddKeywordOrConditions(andConditions, config.category->keywords, false, allocator);
             AddCompetingKeywordExclusions(andConditions, config.category, false, allocator);
 
+            // Left-Hand Keyword conditions
             if (!config.category->leftHandKeywords.empty()) {
-                // Adiciona as condições de keyword requeridas para a mão esquerda
-                AddKeywordOrConditions(andConditions, config.category->leftHandKeywords, true,
-                                       allocator);  // 'true' para Left Hand
-
-                // Adiciona as exclusões de keywords concorrentes para a mão esquerda
-                AddCompetingKeywordExclusions(andConditions, config.category, true,
-                                              allocator);  // 'true' para Left Hand
+                AddKeywordOrConditions(andConditions, config.category->leftHandKeywords, true, allocator);
+                AddCompetingKeywordExclusions(andConditions, config.category, true, allocator);
             }
-            // NOVA LÓGICA PARA MÃO ESQUERDA (DUAL WIELD vs UMA MÃO)
+
+            // Left-Hand Equipped Type condition
             if (config.category->leftHandEquippedTypeValue >= 0.0) {
-                rapidjson::Value equippedTypeL(rapidjson::kObjectType);
-                equippedTypeL.AddMember("condition", "IsEquippedType", allocator);
-                rapidjson::Value typeValL(rapidjson::kObjectType);
-                typeValL.AddMember("value", config.category->leftHandEquippedTypeValue,
-                                    allocator);  // Usa o novo valor
-                equippedTypeL.AddMember("Type", typeValL, allocator);
-                equippedTypeL.AddMember("Left hand", true, allocator);
-                andConditions.PushBack(equippedTypeL, allocator);
-                   // Se a categoria for dual wield do mesmo tipo, também verifica keywords na mão esquerda.
-                  if (config.category->isDualWield &&
-                       config.category->equippedTypeValue == config.category->leftHandEquippedTypeValue) {
-                    AddKeywordOrConditions(andConditions, config.category->keywords, true,
-                                            allocator);  // 'true' para Left Hand
-                    AddCompetingKeywordExclusions(andConditions, config.category, true,
-                                                   allocator);  // 'true' para Left Hand
-                    
-                }
-                
+                AddCompareEquippedTypeCondition(andConditions, config.category->leftHandEquippedTypeValue, true,
+                                                allocator);
+
+                // CORREÇÃO #2: Bloco que causava duplicação de keywords foi removido daqui.
+                // A verificação de keywords da mão esquerda já é feita acima.
             }
 
-            AddCompareValuesCondition(andConditions, "cycle_instance", config.instance_index, allocator);
-            //AddOcfWeaponExclusionConditions(andConditions, allocator);
 
-            // Apenas adiciona a condição de ordem se for um "Pai"
+            // Stance and Playlist order
+            AddCompareValuesCondition(andConditions, "cycle_instance", config.instance_index, allocator);
             if (config.order_in_playlist > 0) {
                 AddCompareValuesCondition(andConditions, "testarone", config.order_in_playlist, allocator);
                 if (config.isParent) {
-                    // LÓGICA DA MÃE: Adicionar condições negadas para cada direção de filha.
                     const auto& childDirs = childDirectionsByPlaylist[config.order_in_playlist];
                     if (!childDirs.empty()) {
                         for (int dirValue : childDirs) {
@@ -1503,15 +1471,9 @@ void AnimationManager::UpdateOrCreateJson(const std::filesystem::path& jsonPath,
                         }
                     }
                 } else {
-                    // ---> LÓGICA DE ATIVAÇÃO CORRIGIDA (RANDOM + DIRECIONAL) <---
-
-                    // 1. Adiciona a condição Random se a checkbox estiver marcada.
-                    //    Esta condição é adicionada diretamente ao bloco AND principal.
                     if (config.pRandom) {
                         AddRandomCondition(andConditions, config.order_in_playlist, allocator);
                     }
-
-                    // 2. Coleta as condições direcionais, independentemente da condição Random.
                     rapidjson::Value directionalOrConditions(rapidjson::kArrayType);
                     if (config.pFront)
                         AddCompareValuesCondition(directionalOrConditions, "DirecionalCycleMoveset", 1, allocator);
@@ -1529,9 +1491,6 @@ void AnimationManager::UpdateOrCreateJson(const std::filesystem::path& jsonPath,
                         AddCompareValuesCondition(directionalOrConditions, "DirecionalCycleMoveset", 7, allocator);
                     if (config.pFrontLeft)
                         AddCompareValuesCondition(directionalOrConditions, "DirecionalCycleMoveset", 8, allocator);
-
-                    // 3. Se houver alguma condição direcional, cria o bloco OR e o adiciona
-                    //    também ao bloco AND principal.
                     if (!directionalOrConditions.Empty()) {
                         rapidjson::Value orBlock(rapidjson::kObjectType);
                         orBlock.AddMember("condition", "OR", allocator);
@@ -1539,37 +1498,31 @@ void AnimationManager::UpdateOrCreateJson(const std::filesystem::path& jsonPath,
                         andConditions.PushBack(orBlock, allocator);
                     }
                 }
-
-                categoryAndBlock.AddMember("Conditions", andConditions, allocator);
-                innerConditions.PushBack(categoryAndBlock, allocator);
             }
+
+            categoryAndBlock.AddMember("Conditions", andConditions, allocator);
+            innerConditions.PushBack(categoryAndBlock, allocator);
         }
         if (!innerConditions.Empty()) {
             masterOrBlock.AddMember("Conditions", innerConditions, allocator);
             conditions.PushBack(masterOrBlock, allocator);
         }
-    }
-    // Se a lista de configs ESTIVER VAZIA, geramos uma condição "kill switch".
-    else {
+    } else {  // "Kill switch" condition
         rapidjson::Value masterOrBlock(rapidjson::kObjectType);
         masterOrBlock.AddMember("condition", "OR", allocator);
         masterOrBlock.AddMember("comment", "OAR_CYCLE_MANAGER_CONDITIONS", allocator);
         rapidjson::Value innerConditions(rapidjson::kArrayType);
-
         rapidjson::Value andBlock(rapidjson::kObjectType);
         andBlock.AddMember("condition", "AND", allocator);
         rapidjson::Value andConditions(rapidjson::kArrayType);
-
-        // Adiciona uma condição que sempre será falsa.
-        // Assumindo que a variável "CycleMovesetDisable" nunca será 1.0 no seu behavior graph.
         AddCompareValuesCondition(andConditions, "CycleMovesetDisable", 1, allocator);
-
         andBlock.AddMember("Conditions", andConditions, allocator);
         innerConditions.PushBack(andBlock, allocator);
         masterOrBlock.AddMember("Conditions", innerConditions, allocator);
         conditions.PushBack(masterOrBlock, allocator);
     }
 
+    // Save the document
     FILE* fp;
     fopen_s(&fp, jsonPath.string().c_str(), "wb");
     if (!fp) {
@@ -2660,7 +2613,7 @@ void AnimationManager::SaveUserMoveset() {
                 }
                 cycleDoc.AddMember("pathDar", rapidjson::Value(originalPathStr.c_str(), allocator), allocator);
                 cycleDoc.AddMember("conversionDone", false, allocator);
-                cycleDoc.AddMember("convertBFCO", _newMovesetIsBFCO, allocator);
+                cycleDoc.AddMember("convertBFCO", subInst.isBFCO, allocator);
                 std::ofstream outFile(subMovesetPath / "CycleDar.json");
                 rapidjson::StringBuffer buffer;
                 rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
@@ -2835,4 +2788,486 @@ void AnimationManager::DrawAddDarModal() {
         }
         ImGui::EndPopup();
     }
+}
+
+// Função para dividir uma string de keywords separadas por vírgula em um vetor
+std::vector<std::string> SplitKeywords(const std::string& s) {
+    std::vector<std::string> tokens;
+    std::string token;
+    std::istringstream tokenStream(s);
+    while (std::getline(tokenStream, token, ',')) {
+        // Remove espaços em branco antes e depois do token
+        token.erase(0, token.find_first_not_of(" \t\n\r"));
+        token.erase(token.find_last_not_of(" \t\n\r") + 1);
+        if (!token.empty()) {
+            tokens.push_back(token);
+        }
+    }
+    return tokens;
+}
+
+void AnimationManager::SaveCustomCategories() {
+    const std::filesystem::path categoriesPath = "Data/SKSE/Plugins/CycleMovesets/Categories";
+
+    // 1. Garante que o diretório de salvamento existe
+    try {
+        if (!std::filesystem::exists(categoriesPath)) {
+            std::filesystem::create_directories(categoriesPath);
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        SKSE::log::error("Falha ao criar o diretório de categorias: {}. Erro: {}", categoriesPath.string(), e.what());
+        return;
+    }
+
+    SKSE::log::info("Salvando categorias customizadas em arquivos individuais...");
+    std::set<std::filesystem::path> savedFilePaths;
+
+    // 2. Salva cada categoria customizada em seu próprio arquivo
+    for (const auto& pair : _categories) {
+        const WeaponCategory& category = pair.second;
+        if (category.isCustom) {
+            rapidjson::Document doc;
+            doc.SetObject();  // O arquivo conterá um único objeto
+            auto& allocator = doc.GetAllocator();
+
+            // Popula o objeto JSON com os dados da categoria
+            doc.AddMember("name", rapidjson::Value(category.name.c_str(), allocator), allocator);
+            doc.AddMember("baseCategoryName", rapidjson::Value(category.baseCategoryName.c_str(), allocator),
+                          allocator);
+            doc.AddMember("isDualWield", category.isDualWield, allocator);
+            doc.AddMember("isShieldCategory", category.isShieldCategory, allocator);
+
+            rapidjson::Value keywordsArray(rapidjson::kArrayType);
+            for (const auto& kw : category.keywords) {
+                keywordsArray.PushBack(rapidjson::Value(kw.c_str(), allocator), allocator);
+            }
+            doc.AddMember("keywords", keywordsArray, allocator);
+
+            if (category.isDualWield) {
+                std::string leftHandBaseName = "Unarmed";  // Padrão
+                for (const auto& basePair : _categories) {
+                    if (!basePair.second.isCustom &&
+                        basePair.second.equippedTypeValue == category.leftHandEquippedTypeValue &&
+                        basePair.second.leftHandEquippedTypeValue == category.leftHandEquippedTypeValue) {
+                        leftHandBaseName = basePair.second.name;
+                        break;
+                    }
+                }
+                doc.AddMember("leftHandBaseCategoryName", rapidjson::Value(leftHandBaseName.c_str(), allocator),
+                              allocator);
+
+                rapidjson::Value leftKeywordsArray(rapidjson::kArrayType);
+                for (const auto& kw : category.leftHandKeywords) {
+                    leftKeywordsArray.PushBack(rapidjson::Value(kw.c_str(), allocator), allocator);
+                }
+                doc.AddMember("leftHandKeywords", leftKeywordsArray, allocator);
+            }
+
+            // Define o caminho do arquivo e o salva
+            std::filesystem::path categoryFilePath = categoriesPath / (category.name + ".json");
+            std::ofstream ofs(categoryFilePath);
+            if (ofs) {
+                rapidjson::StringBuffer buffer;
+                rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
+                doc.Accept(writer);
+                ofs << buffer.GetString();
+                ofs.close();
+                savedFilePaths.insert(categoryFilePath);  // Adiciona à lista de arquivos válidos
+            } else {
+                SKSE::log::error("Falha ao abrir {} para escrita!", categoryFilePath.string());
+            }
+        }
+    }
+
+    // 3. Remove arquivos órfãos (de categorias que foram deletadas na UI)
+    for (const auto& entry : std::filesystem::directory_iterator(categoriesPath)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".json") {
+            if (savedFilePaths.find(entry.path()) == savedFilePaths.end()) {
+                SKSE::log::info("Removendo arquivo de categoria órfão: {}", entry.path().string());
+                std::filesystem::remove(entry.path());
+            }
+        }
+    }
+}
+
+void AnimationManager::LoadCustomCategories() {
+    const std::filesystem::path categoriesPath = "Data/SKSE/Plugins/CycleMovesets/Categories";
+    if (!std::filesystem::exists(categoriesPath)) {
+        SKSE::log::info("Diretório de categorias customizadas não encontrado. Pulando.");
+        return;
+    }
+
+    SKSE::log::info("Carregando categorias customizadas de arquivos individuais...");
+
+    std::map<std::string, const WeaponCategory*> baseCategories;
+    for (const auto& pair : _categories) {
+        if (!pair.second.isCustom) {
+            baseCategories[pair.second.name] = &pair.second;
+        }
+    }
+
+    // Itera sobre cada arquivo no diretório de categorias
+    for (const auto& entry : std::filesystem::directory_iterator(categoriesPath)) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".json") {
+            continue;
+        }
+
+        std::ifstream ifs(entry.path());
+        if (!ifs) {
+            SKSE::log::error("Falha ao abrir o arquivo de categoria: {}", entry.path().string());
+            continue;
+        }
+
+        std::string jsonContent((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+        ifs.close();
+
+        rapidjson::Document doc;
+        doc.Parse(jsonContent.c_str());
+
+        if (doc.HasParseError() || !doc.IsObject()) {
+            SKSE::log::error("Erro no parse do JSON ou o arquivo não é um objeto para: {}", entry.path().string());
+            continue;
+        }
+
+        const rapidjson::Value& categoryObj = doc;  // O documento raiz é o próprio objeto
+
+        // O resto da lógica de leitura é a mesma, mas usando 'categoryObj'
+        if (!categoryObj.HasMember("name") || !categoryObj["name"].IsString() ||
+            !categoryObj.HasMember("baseCategoryName") || !categoryObj["baseCategoryName"].IsString() ||
+            !categoryObj.HasMember("isDualWield") || !categoryObj["isDualWield"].IsBool() ||
+            !categoryObj.HasMember("keywords") || !categoryObj["keywords"].IsArray()) {
+            SKSE::log::warn("Objeto de categoria customizada malformado ou com campos faltando em {}. Pulando.",
+                            entry.path().string());
+            continue;
+        }
+
+        std::string name = categoryObj["name"].GetString();
+        std::string baseName = categoryObj["baseCategoryName"].GetString();
+
+        auto it = baseCategories.find(baseName);
+        if (it == baseCategories.end()) {
+            SKSE::log::warn("Categoria base '{}' para '{}' não encontrada. Pulando.", baseName, name);
+            continue;
+        }
+        const WeaponCategory* baseCat = it->second;
+
+        WeaponCategory newCat;
+        newCat.name = name;
+        newCat.isCustom = true;
+        newCat.baseCategoryName = baseName;
+        newCat.equippedTypeValue = baseCat->equippedTypeValue;
+        newCat.isDualWield = categoryObj["isDualWield"].GetBool();
+        if (categoryObj.HasMember("isShieldCategory") && categoryObj["isShieldCategory"].IsBool()) {
+            newCat.isShieldCategory = categoryObj["isShieldCategory"].GetBool();
+        } else {
+            newCat.isShieldCategory = false;  // Valor padrão se não existir no arquivo
+        }
+
+        for (const auto& kw : categoryObj["keywords"].GetArray()) {
+            if (kw.IsString()) newCat.keywords.push_back(kw.GetString());
+        }
+
+        if (newCat.isDualWield) {
+            if (!categoryObj.HasMember("leftHandBaseCategoryName") ||
+                !categoryObj["leftHandBaseCategoryName"].IsString() || !categoryObj.HasMember("leftHandKeywords") ||
+                !categoryObj["leftHandKeywords"].IsArray()) {
+                SKSE::log::warn("Categoria dual '{}' não tem campos de mão esquerda. Pulando.", name);
+                continue;
+            }
+            std::string leftHandBaseName = categoryObj["leftHandBaseCategoryName"].GetString();
+            auto itLeft = baseCategories.find(leftHandBaseName);
+            if (itLeft != baseCategories.end()) {
+                newCat.leftHandEquippedTypeValue = itLeft->second->equippedTypeValue;
+            } else {
+                newCat.leftHandEquippedTypeValue = 0.0;
+            }
+            for (const auto& kw : categoryObj["leftHandKeywords"].GetArray()) {
+                if (kw.IsString()) newCat.leftHandKeywords.push_back(kw.GetString());
+            }
+        } else {
+            newCat.leftHandEquippedTypeValue = baseCat->leftHandEquippedTypeValue;
+        }
+
+        for (int i = 0; i < 4; ++i) {
+            std::string defaultName = std::format("Stance {}", i + 1);
+            newCat.stanceNames[i] = defaultName;
+            strcpy_s(newCat.stanceNameBuffers[i].data(), newCat.stanceNameBuffers[i].size(), defaultName.c_str());
+        }
+
+        _categories[newCat.name] = newCat;
+    }
+}
+
+void AnimationManager::DrawCreateCategoryModal() {
+    // Determina se estamos no modo de edição baseado no ponteiro
+    bool isEditing = (_categoryToEditPtr != nullptr);
+    const char* popupTitle = isEditing ? "Edit Custom Category" : "Create New Category";
+
+    if (_isCreateCategoryModalOpen) {
+        ImGui::OpenPopup(popupTitle);
+        _isCreateCategoryModalOpen = false;
+    }
+
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImVec2 center = ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f, viewport->Pos.y + viewport->Size.y * 0.5f);
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal(popupTitle, NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        // --- Listas de categorias base para os combos ---
+        std::vector<const char*> baseCategoryNames;
+        std::vector<const WeaponCategory*> baseCategoryPtrs;
+        for (const auto& pair : _categories) {
+            if (!pair.second.isCustom && !pair.second.isDualWield) {
+                baseCategoryNames.push_back(pair.first.c_str());
+                baseCategoryPtrs.push_back(&pair.second);
+            }
+        }
+        std::vector<const char*> dualCategoryNames;
+        std::vector<const WeaponCategory*> dualCategoryPtrs;
+        for (const auto& pair : _categories) {
+            if (!pair.second.isCustom) {
+                dualCategoryNames.push_back(pair.first.c_str());
+                dualCategoryPtrs.push_back(&pair.second);
+            }
+        }
+
+        // --- Campos do formulário ---
+        ImGui::InputText("Category Name", _newCategoryNameBuffer, sizeof(_newCategoryNameBuffer));
+
+        // CORREÇÃO PONTO 1: O combo da arma base agora aparece mesmo se "Shield" estiver marcado
+        ImGui::Combo("Base Weapon (Right Hand)", &_newCategoryBaseIndex, baseCategoryNames.data(),
+                     baseCategoryNames.size());
+
+        ImGui::InputText("Keywords (comma-separated)", _newCategoryKeywordsBuffer, sizeof(_newCategoryKeywordsBuffer));
+
+        if (ImGui::Checkbox("Is Dual Wield", &_newCategoryIsDual)) {
+            if (_newCategoryIsDual) _newCategoryIsShield = false;
+        }
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Left Hand is Shield", &_newCategoryIsShield)) {
+            if (_newCategoryIsShield) _newCategoryIsDual = false;
+        }
+
+        if (_newCategoryIsDual) {
+            ImGui::Separator();
+            ImGui::Text("Dual Wield Options");
+            ImGui::Combo("Base Weapon (Left Hand)", &_newCategoryLeftHandBaseIndex, dualCategoryNames.data(),
+                         dualCategoryNames.size());
+            ImGui::InputText("Left Hand Keywords", _newCategoryLeftHandKeywordsBuffer,
+                             sizeof(_newCategoryLeftHandKeywordsBuffer));
+        }
+        ImGui::Separator();
+
+        // --- Lógica de Salvamento (Unificada) ---
+        const char* saveButtonText = isEditing ? "Save Changes" : "Save";
+        if (ImGui::Button(saveButtonText, ImVec2(120, 0))) {
+            std::string newName = _newCategoryNameBuffer;
+            std::string originalName = isEditing ? _categoryToEditPtr->name : "";
+
+            if (newName.empty() || (newName != originalName && _categories.count(newName))) {
+                RE::DebugNotification("ERROR: Category name cannot be empty or already exists!");
+            } else {
+                // Se o nome mudou, remove a categoria antiga para recriá-la
+                if (isEditing && newName != originalName) {
+                    _categories.erase(originalName);
+                    _npcCategories.erase(originalName);
+                }
+
+                WeaponCategory& catToUpdate = _categories[newName];  // Cria ou acessa a categoria
+                catToUpdate.name = newName;
+                catToUpdate.isCustom = true;
+                catToUpdate.isDualWield = _newCategoryIsDual;
+                catToUpdate.isShieldCategory = _newCategoryIsShield;
+
+                // CORREÇÃO PONTO 1 & 2: Lógica de atribuição de dados
+                const WeaponCategory* baseCat = baseCategoryPtrs[_newCategoryBaseIndex];
+                catToUpdate.baseCategoryName = baseCat->name;
+                catToUpdate.keywords = SplitKeywords(_newCategoryKeywordsBuffer);  // Sempre salva keywords
+
+                if (catToUpdate.isShieldCategory) {
+                    catToUpdate.equippedTypeValue = baseCat->equippedTypeValue;  // Usa o tipo da arma selecionada
+                    catToUpdate.leftHandEquippedTypeValue = 11.0;                // Valor fixo para escudo
+                } else if (catToUpdate.isDualWield) {
+                    const WeaponCategory* leftBaseCat = dualCategoryPtrs[_newCategoryLeftHandBaseIndex];
+                    catToUpdate.equippedTypeValue = baseCat->equippedTypeValue;
+                    catToUpdate.leftHandEquippedTypeValue = leftBaseCat->equippedTypeValue;
+                    catToUpdate.leftHandKeywords = SplitKeywords(_newCategoryLeftHandKeywordsBuffer);
+                } else {  // Categoria normal de uma mão
+                    catToUpdate.equippedTypeValue = baseCat->equippedTypeValue;
+                    catToUpdate.leftHandEquippedTypeValue = baseCat->leftHandEquippedTypeValue;
+                }
+
+                // Inicializa stances para a nova/editada categoria
+                if (!isEditing) {
+                    for (int i = 0; i < 4; ++i) {
+                        std::string defaultName = std::format("Stance {}", i + 1);
+                        catToUpdate.stanceNames[i] = defaultName;
+                        strcpy_s(catToUpdate.stanceNameBuffers[i].data(), catToUpdate.stanceNameBuffers[i].size(),
+                                 defaultName.c_str());
+                    }
+                }
+
+                _npcCategories[newName] = catToUpdate;  // Sincroniza com a lista de NPCs
+                _categoryToEditPtr = nullptr;           // Reseta o ponteiro de edição
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            _categoryToEditPtr = nullptr;  // Reseta o ponteiro de edição
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    } else {
+        // Garante que o ponteiro de edição seja limpo se o popup for fechado de outra forma
+        if (isEditing) {
+            _categoryToEditPtr = nullptr;
+        }
+    }
+}
+
+void AnimationManager::DrawCategoryManager() {
+    if (ImGui::Button("Create New Category")) {
+        _categoryToEditPtr = nullptr;  // Garante que estamos no modo de criação
+        // Limpa os buffers para um formulário novo
+        strcpy_s(_newCategoryNameBuffer, "");
+        strcpy_s(_newCategoryKeywordsBuffer, "");
+        strcpy_s(_newCategoryLeftHandKeywordsBuffer, "");
+        _newCategoryBaseIndex = 0;
+        _newCategoryLeftHandBaseIndex = 0;
+        _newCategoryIsDual = false;
+        _newCategoryIsShield = false;
+        _isCreateCategoryModalOpen = true;
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Create new weapon categories based on vanilla types, but with specific keywords.");
+    }
+
+    ImGui::Separator();
+
+    if (ImGui::BeginTable("CategoriesTable", 3,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
+        ImGui::TableSetupColumn("Category Name", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Details", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 120.0f);  // Aumenta o espaço para 2 botões
+        ImGui::TableHeadersRow();
+
+        std::string categoryToDelete;
+
+        // Usamos um loop de índice para poder modificar o mapa com segurança
+        auto it = _categories.begin();
+        while (it != _categories.end()) {
+            auto& [name, category] = *it;
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("%s", name.c_str());
+
+            ImGui::TableNextColumn();
+            if (category.isCustom) {
+                ImGui::Text("Base: %s", category.baseCategoryName.c_str());
+            } else {
+                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Base Category");
+            }
+
+            ImGui::TableNextColumn();
+            if (category.isCustom) {
+                ImGui::PushID(name.c_str());
+                if (ImGui::Button("Edit")) {
+                    _categoryToEditPtr = &category;  // Aponta para a categoria, ativando o modo de edição
+
+                    // Preenche os buffers com os dados atuais da categoria
+                    strcpy_s(_newCategoryNameBuffer, name.c_str());
+                    _newCategoryIsDual = category.isDualWield;
+                    _newCategoryIsShield = category.isShieldCategory;
+
+                    // Converte vetores de keywords para strings
+                    auto join_keywords = [](const std::vector<std::string>& keywords) {
+                        std::string result;
+                        for (size_t i = 0; i < keywords.size(); ++i) {
+                            result += keywords[i] + (i == keywords.size() - 1 ? "" : ", ");
+                        }
+                        return result;
+                    };
+                    strcpy_s(_newCategoryKeywordsBuffer, join_keywords(category.keywords).c_str());
+                    strcpy_s(_newCategoryLeftHandKeywordsBuffer, join_keywords(category.leftHandKeywords).c_str());
+
+                    // Encontra os índices para os combos
+                    // Lógica para encontrar o índice da base direita
+                    _newCategoryBaseIndex = 0;  // Default
+                    int current_idx = 0;
+                    for (const auto& pair : _categories) {
+                        if (!pair.second.isCustom && !pair.second.isDualWield) {
+                            if (pair.first == category.baseCategoryName) {
+                                _newCategoryBaseIndex = current_idx;
+                                break;
+                            }
+                            current_idx++;
+                        }
+                    }
+                    // Encontra os índices para os combos (lógica mais complexa, simplificada aqui)
+                    _newCategoryLeftHandBaseIndex = 0;  // Mesma coisa aqui
+                    _isCreateCategoryModalOpen = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Delete")) {
+                    categoryToDelete = name;
+                }
+                ImGui::PopID();
+            }
+            ++it;
+        }
+        ImGui::EndTable();
+
+        if (!categoryToDelete.empty()) {
+            _categories.erase(categoryToDelete);
+            _npcCategories.erase(categoryToDelete);
+            SKSE::log::info("Categoria '{}' removida.", categoryToDelete);
+        }
+    }
+}
+
+void AnimationManager::AddCompareEquippedTypeCondition(rapidjson::Value& conditionsArray, double type, bool isLeftHand,
+                                                       rapidjson::Document::AllocatorType& allocator) {
+    rapidjson::Value equippedType(rapidjson::kObjectType);
+    equippedType.AddMember("condition", "IsEquippedType", allocator);
+    rapidjson::Value typeVal(rapidjson::kObjectType);
+    typeVal.AddMember("value", type, allocator);
+    equippedType.AddMember("Type", typeVal, allocator);
+    equippedType.AddMember("Left hand", isLeftHand, allocator);
+    conditionsArray.PushBack(equippedType, allocator);
+}
+
+void AnimationManager::AddShieldCategoryExclusions(rapidjson::Value& parentArray,
+                                                   rapidjson::Document::AllocatorType& allocator) {
+    // 1. Coleta todas as keywords de categorias de escudo customizadas
+    std::vector<std::string> competingKeywords;
+    for (const auto& pair : _categories) {
+        const WeaponCategory& otherCategory = pair.second;
+        // A condição é: ser customizada, ser uma categoria de escudo, E ter keywords
+        if (otherCategory.isCustom && otherCategory.isShieldCategory && !otherCategory.keywords.empty()) {
+            competingKeywords.insert(competingKeywords.end(), otherCategory.keywords.begin(),
+                                     otherCategory.keywords.end());
+        }
+    }
+
+    if (competingKeywords.empty()) {
+        return;  // Nenhuma exclusão necessária
+    }
+
+    // 2. Cria um único bloco AND para conter todas as exclusões (NOT keyword1 AND NOT keyword2 ...)
+    rapidjson::Value exclusionAndBlock(rapidjson::kObjectType);
+    exclusionAndBlock.AddMember("condition", "AND", allocator);
+    exclusionAndBlock.AddMember("comment", "Exclude competing custom Shield + Weapon categories", allocator);
+    rapidjson::Value innerExclusionConditions(rapidjson::kArrayType);
+
+    for (const auto& keyword : competingKeywords) {
+        // Adiciona a condição 'IsEquippedHasKeyword' negada para a mão direita (onde a arma com keyword está)
+        AddKeywordCondition(innerExclusionConditions, keyword, false, true, allocator);
+    }
+
+    exclusionAndBlock.AddMember("Conditions", innerExclusionConditions, allocator);
+    parentArray.PushBack(exclusionAndBlock, allocator);
 }

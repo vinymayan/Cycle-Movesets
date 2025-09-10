@@ -82,6 +82,19 @@ private:
 
     void DrawAddDarModal();
 
+    void SaveCustomCategories();
+
+    void LoadCustomCategories();
+
+    void DrawCreateCategoryModal();
+
+    void DrawCategoryManager();
+
+    void AddCompareEquippedTypeCondition(rapidjson::Value& conditionsArray, double type, bool isLeftHand,
+                                         rapidjson::Document::AllocatorType& allocator);
+
+    void AddShieldCategoryExclusions(rapidjson::Value& parentArray, rapidjson::Document::AllocatorType& allocator);
+
     // --- NOVAS VARIÁVEIS PARA GERENCIAR MOVESETS DO USUÁRIO ---
 
     // Estrutura para manter um moveset de usuário em memória
@@ -157,7 +170,7 @@ private:
     struct CreatorSubAnimationInstance {
         const SubAnimationDef* sourceDef;  // Ponteiro para a definição original
         std::array<char, 128> editedName;  // Nome editável
-
+        bool isBFCO = false;
         // Flags para todas as checkboxes
         bool pFront = false, pBack = false, pLeft = false, pRight = false;
         bool pFrontRight = false, pFrontLeft = false, pBackRight = false, pBackLeft = false;
@@ -171,6 +184,22 @@ private:
 
     // Ponteiros para gerenciar o modal de adição
     StanceContent* _stanceToAddTo = nullptr;
+
+    // ---> INÍCIO DAS ADIÇÕES: Estado da UI do Criador de Categoria <---
+    bool _isCreateCategoryModalOpen = false;
+    char _newCategoryNameBuffer[128] = "";
+    int _newCategoryBaseIndex = 0;
+    char _newCategoryKeywordsBuffer[256] = "";
+    bool _newCategoryIsDual = false;
+    bool _newCategoryIsShield = false;
+    int _newCategoryLeftHandBaseIndex = 0;
+    char _newCategoryLeftHandKeywordsBuffer[256] = "";
+    // ---> FIM DAS ADIÇÕES <---
+
+    // ---> INÍCIO DAS ADIÇÕES: Estado da UI do Editor de Categoria <---
+    WeaponCategory* _categoryToEditPtr = nullptr;
+    char _originalCategoryName[128] = "";  // Para saber qual arquivo renomear/deletar
+    // ---> FIM DAS ADIÇÕES <---
 };
 
 struct FileSaveConfig {

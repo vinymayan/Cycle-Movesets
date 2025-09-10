@@ -56,6 +56,7 @@ struct WeaponCategory {
     double leftHandEquippedTypeValue = -1.0;
     int activeInstanceIndex = 0;
     bool isDualWield = false;
+    bool isShieldCategory = false;
     std::vector<std::string> keywords;
     std::vector<std::string> leftHandKeywords;
     std::array<CategoryInstance, 4> instances;
@@ -64,6 +65,9 @@ struct WeaponCategory {
     std::array<std::string, 4> stanceNames;
     // Buffer para edição no ImGui (evita problemas com std::string)
     std::array<std::array<char, 64>, 4> stanceNameBuffers;
+
+    bool isCustom = false;
+    std::string baseCategoryName;
 };
 
 struct UserMoveset {
