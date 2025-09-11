@@ -2923,6 +2923,14 @@
         SKSE::log::info("Salvando categorias customizadas em arquivos individuais...");
         std::set<std::filesystem::path> savedFilePaths;
 
+        if (std::filesystem::exists(categoriesPath)) {
+            for (const auto& entry : std::filesystem::directory_iterator(categoriesPath)) {
+                if (entry.is_regular_file() && entry.path().extension() == ".json") {
+                    savedFilePaths.insert(entry.path());
+                }
+            }
+        }
+
         // 2. Salva cada categoria customizada em seu próprio arquivo
         for (const auto& pair : _categories) {
             const WeaponCategory& category = pair.second;
@@ -2979,14 +2987,17 @@
                 }
             }
         }
-
+        std::set<std::filesystem::path> currentCustomCategoryFiles;
+        for (const auto& pair : _categories) {
+            if (pair.second.isCustom) {
+                currentCustomCategoryFiles.insert(categoriesPath / (pair.first + ".json"));
+            }
+        }
         // 3. Remove arquivos órfãos (de categorias que foram deletadas na UI)
-        for (const auto& entry : std::filesystem::directory_iterator(categoriesPath)) {
-            if (entry.is_regular_file() && entry.path().extension() == ".json") {
-                if (savedFilePaths.find(entry.path()) == savedFilePaths.end()) {
-                    SKSE::log::info("Removendo arquivo de categoria órfão: {}", entry.path().string());
-                    std::filesystem::remove(entry.path());
-                }
+        for (const auto& existingPath : savedFilePaths) {
+            if (currentCustomCategoryFiles.find(existingPath) == currentCustomCategoryFiles.end()) {
+                SKSE::log::info("Removendo arquivo de categoria órfão: {}", existingPath.string());
+                std::filesystem::remove(existingPath);
             }
         }
     }
@@ -3227,10 +3238,11 @@
         }
     }
 
-    void AnimationManager::DrawCategoryManager() {
+void AnimationManager::DrawCategoryManager() {
         if (ImGui::Button("Create New Category")) {
             _categoryToEditPtr = nullptr;  // Garante que estamos no modo de criação
             // Limpa os buffers para um formulário novo
+            strcpy_s(_originalCategoryName, "");
             strcpy_s(_newCategoryNameBuffer, "");
             strcpy_s(_newCategoryKeywordsBuffer, "");
             strcpy_s(_newCategoryLeftHandKeywordsBuffer, "");
@@ -3252,14 +3264,13 @@
                               ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
             ImGui::TableSetupColumn("Category Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Details", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 120.0f);  // Aumenta o espaço para 2 botões
+            ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 120.0f);
             ImGui::TableHeadersRow();
 
             std::string categoryToDelete;
 
-            // Usamos um loop de índice para poder modificar o mapa com segurança
-            auto it = _categories.begin();
-            while (it != _categories.end()) {
+            // Usamos um iterador para poder apagar da lista de forma segura
+            for (auto it = _categories.begin(); it != _categories.end();) {
                 auto& [name, category] = *it;
 
                 ImGui::TableNextRow();
@@ -3280,6 +3291,7 @@
                         _categoryToEditPtr = &category;  // Aponta para a categoria, ativando o modo de edição
 
                         // Preenche os buffers com os dados atuais da categoria
+                        strcpy_s(_originalCategoryName, name.c_str());  // Guarda o nome original
                         strcpy_s(_newCategoryNameBuffer, name.c_str());
                         _newCategoryIsDual = category.isDualWield;
                         _newCategoryIsShield = category.isShieldCategory;
@@ -3295,9 +3307,9 @@
                         strcpy_s(_newCategoryKeywordsBuffer, join_keywords(category.keywords).c_str());
                         strcpy_s(_newCategoryLeftHandKeywordsBuffer, join_keywords(category.leftHandKeywords).c_str());
 
-                        // Encontra os índices para os combos
+                        // --- INÍCIO DA CORREÇÃO #3: ENCONTRAR ÍNDICES CORRETOS ---
                         // Lógica para encontrar o índice da base direita
-                        _newCategoryBaseIndex = 0;  // Default
+                        _newCategoryBaseIndex = 0;
                         int current_idx = 0;
                         for (const auto& pair : _categories) {
                             if (!pair.second.isCustom && !pair.second.isDualWield) {
@@ -3308,9 +3320,27 @@
                                 current_idx++;
                             }
                         }
-                        // Encontra os índices para os combos (lógica mais complexa, simplificada aqui)
-                        _newCategoryLeftHandBaseIndex = 0;  // Mesma coisa aqui
-                        _isCreateCategoryModalOpen = true;
+
+                        // Lógica para encontrar o índice da base esquerda (se for dual wield)
+                        _newCategoryLeftHandBaseIndex = 0;
+                        if (category.isDualWield) {
+                            current_idx = 0;
+                            for (const auto& pair : _categories) {
+                                if (!pair.second.isCustom) {
+                                    // Precisa encontrar o nome da categoria base da mão esquerda
+                                    // Esta lógica é complexa, por enquanto vamos procurar pelo typeValue
+                                    if (pair.second.equippedTypeValue == category.leftHandEquippedTypeValue &&
+                                        pair.second.leftHandEquippedTypeValue == category.leftHandEquippedTypeValue) {
+                                        _newCategoryLeftHandBaseIndex = current_idx;
+                                        break;
+                                    }
+                                    current_idx++;
+                                }
+                            }
+                        }
+                        // --- FIM DA CORREÇÃO #3 ---
+
+                        _isCreateCategoryModalOpen = true;  // Abre o mesmo modal, mas agora em modo de edição
                     }
                     ImGui::SameLine();
                     if (ImGui::Button("Delete")) {
