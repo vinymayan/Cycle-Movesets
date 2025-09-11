@@ -176,14 +176,18 @@ private:
         bool pFrontRight = false, pFrontLeft = false, pBackRight = false, pBackLeft = false;
         bool pRandom = false, pDodge = false;
     };
-    struct StanceContent {
+
+
+    struct CreatorStance {
         std::vector<CreatorSubAnimationInstance> subMovesets;
     };
-    std::array<StanceContent, 4> _newMovesetStances;
+    std::map<std::string, std::array<CreatorStance, 4>> _movesetCreatorStances;
+
     std::array<bool, 4> _newMovesetStanceEnabled = {true, true, true, true};  // Para habilitar/desabilitar stances
 
     // Ponteiros para gerenciar o modal de adição
-    StanceContent* _stanceToAddTo = nullptr;
+    CreatorStance* _stanceToAddTo = nullptr;
+    char _categoryFilterBuffer[128] = "";
 
     // ---> INÍCIO DAS ADIÇÕES: Estado da UI do Criador de Categoria <---
     bool _isCreateCategoryModalOpen = false;
@@ -200,6 +204,8 @@ private:
     WeaponCategory* _categoryToEditPtr = nullptr;
     char _originalCategoryName[128] = "";  // Para saber qual arquivo renomear/deletar
     // ---> FIM DAS ADIÇÕES <---
+
+    std::map<std::string, bool> _newMovesetCategorySelection;
 };
 
 struct FileSaveConfig {
