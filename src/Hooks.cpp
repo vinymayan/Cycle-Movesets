@@ -11,6 +11,7 @@
 #include "MCP.h"
 #include "OARAPI.h"
 #include "Serialization.h"
+#include "ClibUtil/editorID.hpp"
 
     // Função auxiliar para copiar um único arquivo com logs
     void CopySingleFile(const std::filesystem::path& sourceFile, const std::filesystem::path& destinationPath,
@@ -340,7 +341,7 @@
         // Agora que a biblioteca de mods (_allMods) está completa, carregamos a configuração da UI.
         _npcCategories = _categories;
         LoadCycleMovesets();
-
+        PopulateNpcList();
         SKSE::log::info("Categorias de armas para NPCs inicializadas.");
     }
 
@@ -552,6 +553,7 @@
         DrawStanceEditorPopup();
         DrawRestartPopup();
         DrawCreateCategoryModal();
+        
     }
 
     // Nova função para desenhar a interface de criação de movesets
@@ -718,6 +720,7 @@
         DrawNPCManager();
         DrawAddModModal();
         DrawRestartPopup();
+        DrawNpcSelectionModal();
     }
 
     int AnimationManager::GetMaxMovesetsFor(const std::string& category, int stanceIndex) { 
@@ -1029,29 +1032,84 @@
         }
 
     }
+
+
+// INÍCIO DA SUBSTITUIÇÃO (Função DrawNPCManager)
     void AnimationManager::DrawNPCManager() {
         if (ImGui::Button(LOC("save"))) {
-            SaveAllSettings();  // Chama a nova função de salvamento específica para NPCs
+            SaveAllSettings();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Adicionar/Gerenciar NPCs Específicos")) {
+            _isNpcSelectionModalOpen = true;
         }
         ImGui::Separator();
 
-        if (_npcCategories.empty()) {
-            ImGui::Text("Nenhuma categoria de animação foi carregada para NPCs.");
+        _npcSelectorList.clear();
+        _npcSelectorList.push_back("NPCs (Geral)");
+        static std::vector<std::string> npcSelectorLabels;
+        npcSelectorLabels.clear();
+
+        // Constrói as labels diretamente da nossa estrutura de dados carregada
+        for (const auto& pair : _specificNpcConfigs) {
+            RE::FormID formID = pair.first;
+            const SpecificNpcConfig& config = pair.second;
+            npcSelectorLabels.push_back(std::format("{} ({:08X})", config.name, formID));
+        }
+        for (const auto& label : npcSelectorLabels) {
+            _npcSelectorList.push_back(label.c_str());
+        }
+
+        int currentSelection = 0;
+        if (_currentlySelectedNpcFormID == 0) {
+            currentSelection = 0;
+        } else {
+            int i = 1;
+            for (const auto& pair : _specificNpcConfigs) {
+                if (pair.first == _currentlySelectedNpcFormID) {
+                    currentSelection = i;
+                    break;
+                }
+                i++;
+            }
+        }
+
+        if (ImGui::Combo("Configurar Para", &currentSelection, _npcSelectorList.data(), _npcSelectorList.size())) {
+            if (currentSelection == 0) {
+                _currentlySelectedNpcFormID = 0;
+            } else {
+                int i = 1;
+                for (const auto& pair : _specificNpcConfigs) {
+                    if (i == currentSelection) {
+                        _currentlySelectedNpcFormID = pair.first;
+                        break;
+                    }
+                    i++;
+                }
+            }
+        }
+        ImGui::Separator();
+
+        std::map<std::string, WeaponCategory>* categoriesToDraw =
+            (_currentlySelectedNpcFormID == 0) ? &_npcCategories
+                                               : &_specificNpcConfigs.at(_currentlySelectedNpcFormID).categories;
+
+        if (categoriesToDraw->empty()) {
+            ImGui::Text("Nenhuma categoria de animação foi carregada.");
             return;
         }
 
-        // Sistema de abas para separar Dual Wield, igual ao do Player
         if (ImGui::BeginTabBar("WeaponTypeTabs_NPC")) {
             if (ImGui::BeginTabItem("Single Wield")) {
-                for (auto& pair : _npcCategories) {
+                for (auto& pair : *categoriesToDraw) {
                     if (!pair.second.isDualWield) {
-                        DrawNPCCategoryUI(pair.second);  // Chama o helper de UI específico para NPC
+                        DrawNPCCategoryUI(pair.second);
                     }
                 }
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Dual Wield")) {
-                for (auto& pair : _npcCategories) {
+                for (auto& pair : *categoriesToDraw) {
                     if (pair.second.isDualWield) {
                         DrawNPCCategoryUI(pair.second);
                     }
@@ -1061,6 +1119,7 @@
             ImGui::EndTabBar();
         }
     }
+    // FIM DA SUBSTITUIÇÃO
 
     // Helper para a UI de Categoria do NPC
     void AnimationManager::DrawNPCCategoryUI(WeaponCategory& category) {
@@ -1208,126 +1267,127 @@
         ImGui::PopID();
     }
 
-    void AnimationManager::SaveAllSettings() {
+void AnimationManager::SaveAllSettings() {
         SKSE::log::info("Iniciando salvamento global de todas as configurações...");
         SaveCustomCategories();
         SaveStanceNames();
-        SaveCycleMovesets();
+        SaveCycleMovesets();  // Esta já foi corrigida e está funcionando.
         SKSE::log::info("Gerando arquivos de condição para OAR...");
         std::map<std::filesystem::path, std::vector<FileSaveConfig>> fileUpdates;
 
-        // 1. Loop através de cada CATEGORIA de arma
+        // 1. Processa as categorias do JOGADOR
         for (auto& pair : _categories) {
             WeaponCategory& category = pair.second;
-
-            // 2. Loop através de cada uma das 4 INSTÂNCIAS
-            for (int i = 0; i < 4; ++i) {
+            for (int i = 0; i < 4; ++i) {  // Stances
                 CategoryInstance& instance = category.instances[i];
-                int playlistParentCounter = 1;  // Contador para os itens "Pai"
-                int lastParentOrder = 0;        // Armazena o número do último "Pai"
-                // 3. Loop através dos MOVESETS (ModInstance) na instância
-                for (size_t mod_i = 0; mod_i < instance.modInstances.size(); ++mod_i) {
-                    ModInstance& modInstance = instance.modInstances[mod_i];
+                int playlistParentCounter = 1;
+                int lastParentOrder = 0;
+                for (auto& modInstance : instance.modInstances) {
+                    if (!modInstance.isSelected) continue;
+                    for (auto& subInstance : modInstance.subAnimationInstances) {
+                        if (!subInstance.isSelected) continue;
 
-                    // 4. Loop através dos SUB-MOVESETS (SubAnimationInstance)
-                    for (size_t sub_j = 0; sub_j < modInstance.subAnimationInstances.size(); ++sub_j) {
-                        SubAnimationInstance& subInstance = modInstance.subAnimationInstances[sub_j];
+                        const auto& sourceSubAnim =
+                            _allMods[subInstance.sourceModIndex].subAnimations[subInstance.sourceSubAnimIndex];
+                        FileSaveConfig config;
+                        config.isNPC = false;
+                        config.instance_index = i + 1;
+                        config.category = &category;
+                        config.pFront = subInstance.pFront;
+                        config.pBack = subInstance.pBack;
+                        config.pLeft = subInstance.pLeft;
+                        config.pRight = subInstance.pRight;
+                        config.pFrontRight = subInstance.pFrontRight;
+                        config.pFrontLeft = subInstance.pFrontLeft;
+                        config.pBackRight = subInstance.pBackRight;
+                        config.pBackLeft = subInstance.pBackLeft;
+                        config.pRandom = subInstance.pRandom;
+                        config.pDodge = subInstance.pDodge;
 
-                        // Salva apenas se tanto o sub-moveset quanto o moveset pai estiverem selecionados
-                        if (modInstance.isSelected && subInstance.isSelected) {
-                            const auto& sourceMod = _allMods[subInstance.sourceModIndex];
-                            const auto& sourceSubAnim = sourceMod.subAnimations[subInstance.sourceSubAnimIndex];
-
-                            FileSaveConfig config;
-                            config.isNPC = false;
-                            config.instance_index = i + 1;  // Instância é 1-4
-                            config.category = &category;
-
-                            // Copia o estado de todas as checkboxes para o config
-                            config.pFront = subInstance.pFront;
-                            config.pBack = subInstance.pBack;
-                            config.pLeft = subInstance.pLeft;
-                            config.pRight = subInstance.pRight;
-                            config.pFrontRight = subInstance.pFrontRight;
-                            config.pFrontLeft = subInstance.pFrontLeft;
-                            config.pBackRight = subInstance.pBackRight;
-                            config.pBackLeft = subInstance.pBackLeft;
-                            config.pRandom = subInstance.pRandom;
-                            config.pDodge = subInstance.pDodge;
-
-                            // Determina se é um "Pai" (nenhuma checkbox de direção marcada) ou "Filho"
-                            bool isParent = !(config.pFront || config.pBack || config.pLeft || config.pRight ||
-                                              config.pFrontRight || config.pFrontLeft || config.pBackRight ||
-                                              config.pBackLeft || config.pRandom || config.pDodge);
-
-                            config.isParent = isParent;
-
-                            if (isParent) {
-                                lastParentOrder = playlistParentCounter;
-                                config.order_in_playlist = playlistParentCounter++;
-                            } else {
-                                // Filhos herdam o número do último pai encontrado
-                                config.order_in_playlist = lastParentOrder;
-                            }
-
-                            // Adiciona a configuração ao mapa, agrupada pelo caminho do arquivo
-                            fileUpdates[sourceSubAnim.path].push_back(config);
+                        bool isParent = !(config.pFront || config.pBack || config.pLeft || config.pRight ||
+                                          config.pFrontRight || config.pFrontLeft || config.pBackRight ||
+                                          config.pBackLeft || config.pRandom || config.pDodge);
+                        config.isParent = isParent;
+                        if (isParent) {
+                            lastParentOrder = playlistParentCounter;
+                            config.order_in_playlist = playlistParentCounter++;
+                        } else {
+                            config.order_in_playlist = lastParentOrder;
                         }
+                        fileUpdates[sourceSubAnim.path].push_back(config);
                     }
                 }
             }
         }
 
-        // Processar Configurações dos NPCs ---
-        // Adicione este bloco logo após o final do loop de '_categories'.
-        // É quase uma cópia do loop acima, mas para '_npcCategories'.
-        SKSE::log::info("Coletando configurações de NPCs para salvamento...");
+        // 2. Processa as categorias dos NPCS GERAIS
         for (auto& pair : _npcCategories) {
             WeaponCategory& category = pair.second;
-            // NPCs usam apenas a stance 0 (índice 0)
-            CategoryInstance& instance = category.instances[0];
+            CategoryInstance& instance = category.instances[0];  // NPCs usam stance 0
             int playlistCounter = 1;
-
             for (auto& modInstance : instance.modInstances) {
                 if (!modInstance.isSelected) continue;
-
                 for (auto& subInstance : modInstance.subAnimationInstances) {
                     if (!subInstance.isSelected) continue;
 
-                    const auto& sourceMod = _allMods[subInstance.sourceModIndex];
-                    const auto& sourceSubAnim = sourceMod.subAnimations[subInstance.sourceSubAnimIndex];
-
+                    const auto& sourceSubAnim =
+                        _allMods[subInstance.sourceModIndex].subAnimations[subInstance.sourceSubAnimIndex];
                     FileSaveConfig config;
-                    config.isNPC = true;        // Flag que diferencia do Player
-                    config.instance_index = 0;  // Stance 0 para NPCs
+                    config.isNPC = true;
+                    config.npcFormID = 0;  // 0 indica NPC Geral
+                    config.instance_index = 0;
                     config.category = &category;
-                    config.isParent = true;  // Para NPCs, cada entrada é um "Pai" na playlist
+                    config.isParent = true;
                     config.order_in_playlist = playlistCounter++;
-
-                    // Copiando flags relevantes para NPCs
                     config.pRandom = subInstance.pRandom;
                     config.pDodge = subInstance.pDodge;
-
-                    // Zerando flags direcionais para consistência
-                    config.pFront = config.pBack = config.pLeft = config.pRight = false;
-                    config.pFrontRight = config.pFrontLeft = config.pBackRight = config.pBackLeft = false;
-
-                    // Adiciona ao mesmo mapa de atualizações
                     fileUpdates[sourceSubAnim.path].push_back(config);
                 }
             }
         }
 
-        // Agora, verificamos todos os arquivos que já gerenciamos.
-        // Se algum deles não estiver na lista de atualizações ativas,
-        // significa que ele foi removido e precisa ser desativado.
-        for (const auto& managedPath : _managedFiles) {
-            // Se o arquivo não está no mapa de atualizações, adicione-o com um vetor vazio.
-            if (fileUpdates.find(managedPath) == fileUpdates.end()) {
-                fileUpdates[managedPath] = {};  // Adiciona para a fila de desativação
+        // 3. NOVO: Processa as categorias dos NPCS ESPECÍFICOS
+        for (const auto& npcConfigPair : _specificNpcConfigs) {
+            RE::FormID specificNpcId = npcConfigPair.first;
+            const SpecificNpcConfig& npcConfig = npcConfigPair.second;  // Acessa a struct completa
+
+            // A busca pelo pluginName não é mais necessária, já o temos!
+            const std::string& npcPluginName = npcConfig.pluginName;
+
+            // Itera sobre o mapa 'categories' dentro da struct
+            for (const auto& pair : npcConfig.categories) {
+                const WeaponCategory& category = pair.second;
+                const CategoryInstance& instance = category.instances[0];
+                int playlistCounter = 1;
+                for (const auto& modInstance : instance.modInstances) {
+                    if (!modInstance.isSelected) continue;
+                    for (const auto& subInstance : modInstance.subAnimationInstances) {
+                        if (!subInstance.isSelected) continue;
+
+                        const auto& sourceSubAnim =
+                            _allMods[subInstance.sourceModIndex].subAnimations[subInstance.sourceSubAnimIndex];
+                        FileSaveConfig config;
+                        config.isNPC = true;
+                        config.npcFormID = specificNpcId;   // ID específico do NPC
+                        config.pluginName = npcPluginName;  // Nome do plugin (direto da struct)
+                        config.instance_index = 0;
+                        config.category = &category;
+                        config.isParent = true;
+                        config.order_in_playlist = playlistCounter++;
+                        config.pRandom = subInstance.pRandom;
+                        config.pDodge = subInstance.pDodge;
+                        fileUpdates[sourceSubAnim.path].push_back(config);
+                    }
+                }
             }
         }
-        // Adiciona todos os novos arquivos à lista de gerenciados para o futuro.
+
+        // Lógica para desativar arquivos que não são mais usados (sem alteração)
+        for (const auto& managedPath : _managedFiles) {
+            if (fileUpdates.find(managedPath) == fileUpdates.end()) {
+                fileUpdates[managedPath] = {};
+            }
+        }
         for (const auto& pair : fileUpdates) {
             _managedFiles.insert(pair.first);
         }
@@ -1340,8 +1400,6 @@
         SKSE::log::info("Salvamento global concluído.");
         RE::DebugNotification("Todas as configurações foram salvas!");
         UpdateMaxMovesetCache();
-
-        //RecarregarAnimacoesOAR();
         _showRestartPopup = true;
     }
 
@@ -1446,14 +1504,68 @@
                 {
                     rapidjson::Value actorBase(rapidjson::kObjectType);
                     actorBase.AddMember("condition", "IsActorBase", allocator);
-                    if (config.isNPC) {
-                        actorBase.AddMember("negated", true, allocator);
-                    }
                     rapidjson::Value actorBaseParams(rapidjson::kObjectType);
-                    actorBaseParams.AddMember("pluginName", "Skyrim.esm", allocator);
-                    actorBaseParams.AddMember("formID", "7", allocator);
+
+                    if (config.npcFormID != 0) {  // CASO 1: NPC ESPECÍFICO
+                        actorBase.AddMember("negated", false, allocator);
+                        actorBaseParams.AddMember("pluginName", rapidjson::Value(config.pluginName.c_str(), allocator),
+                                                  allocator);
+
+                        // Formata o FormID para os últimos 5 dígitos
+                        std::string fullFormIDStr = std::format("{:08X}", config.npcFormID);
+                        std::string shortFormIDStr = fullFormIDStr.substr(3);  // Pega de "000A2C8E" -> "A2C8E"
+                        actorBaseParams.AddMember("formID", rapidjson::Value(shortFormIDStr.c_str(), allocator),
+                                                  allocator);
+
+                    } else if (config.isNPC) {  // CASO 2: NPC GERAL
+                        actorBase.AddMember("negated", true, allocator);
+                        actorBaseParams.AddMember("pluginName", "Skyrim.esm", allocator);
+                        actorBaseParams.AddMember("formID", "7", allocator);  // Nega o Player
+
+                    } else {  // CASO 3: JOGADOR
+                        actorBase.AddMember("negated", false, allocator);
+                        actorBaseParams.AddMember("pluginName", "Skyrim.esm", allocator);
+                        actorBaseParams.AddMember("formID", "7", allocator);
+                    }
                     actorBase.AddMember("Actor base", actorBaseParams, allocator);
                     andConditions.PushBack(actorBase, allocator);
+
+                    // NOVO: Se for NPC Geral, adiciona a exclusão de NPCs específicos
+                    if (config.isNPC && config.npcFormID == 0 && !_specificNpcConfigs.empty()) {
+                        rapidjson::Value exclusionAndBlock(rapidjson::kObjectType);
+                        exclusionAndBlock.AddMember("condition", "AND", allocator);
+                        exclusionAndBlock.AddMember("comment", "Exclude specific NPCs", allocator);
+                        rapidjson::Value exclusionConditions(rapidjson::kArrayType);
+
+                        for (const auto& npcPair : _specificNpcConfigs) {
+                            RE::FormID idToExclude = npcPair.first;
+                            std::string pluginToExclude;
+                            for (const auto& npcInfo : _fullNpcList) {
+                                if (npcInfo.formID == idToExclude) {
+                                    pluginToExclude = npcInfo.pluginName;
+                                    break;
+                                }
+                            }
+                            if (!pluginToExclude.empty()) {
+                                rapidjson::Value negatedActor(rapidjson::kObjectType);
+                                negatedActor.AddMember("condition", "IsActorBase", allocator);
+                                negatedActor.AddMember("negated", true, allocator);
+                                rapidjson::Value negatedParams(rapidjson::kObjectType);
+                                negatedParams.AddMember(
+                                    "pluginName", rapidjson::Value(pluginToExclude.c_str(), allocator), allocator);
+                                std::string fullIdStr = std::format("{:08X}", idToExclude);
+                                std::string shortIdStr = fullIdStr.substr(3);
+                                negatedParams.AddMember("formID", rapidjson::Value(shortIdStr.c_str(), allocator),
+                                                        allocator);
+                                negatedActor.AddMember("Actor base", negatedParams, allocator);
+                                exclusionConditions.PushBack(negatedActor, allocator);
+                            }
+                        }
+                        if (!exclusionConditions.Empty()) {
+                            exclusionAndBlock.AddMember("Conditions", exclusionConditions, allocator);
+                            andConditions.PushBack(exclusionAndBlock, allocator);
+                        }
+                    }
                 }
 
                 // Right-Hand Equipped Type condition
@@ -1850,17 +1962,19 @@
     }
 
 
+// INÍCIO DA SUBSTITUIÇÃO (Função SaveCycleMovesets)
     void AnimationManager::SaveCycleMovesets() {
-        SKSE::log::info("Iniciando salvamento descentralizado no formato Player/NPC...");
+        SKSE::log::info("Iniciando salvamento de CycleMoveset.json para Player, NPCs Gerais e Específicos...");
 
         std::map<std::filesystem::path, std::unique_ptr<rapidjson::Document>> documents;
         std::set<std::filesystem::path> requiredFiles;
 
         auto processActorCategories = [&](const std::map<std::string, WeaponCategory>& sourceCategories,
-                                          const std::string& actorName) {
+                                          const std::string& actorName, const std::string& actorFormID = "",
+                                          const std::string& actorPlugin = "") {
             for (const auto& pair : sourceCategories) {
                 const WeaponCategory& category = pair.second;
-                for (int i = 0; i < 4; ++i) {  // Stances
+                for (int i = 0; i < 4; ++i) {
                     const CategoryInstance& instance = category.instances[i];
                     for (const auto& modInst : instance.modInstances) {
                         if (!modInst.isSelected) continue;
@@ -1869,9 +1983,10 @@
                         for (const auto& subInst : modInst.subAnimationInstances) {
                             if (!subInst.isSelected) continue;
 
-                            const auto& animOriginMod = _allMods[subInst.sourceModIndex];
-                            const auto& animOriginSub = animOriginMod.subAnimations[subInst.sourceSubAnimIndex];
-                            std::filesystem::path cycleJsonPath = animOriginSub.path.parent_path() / "CycleMoveset.json";
+                            const auto& animOriginSub =
+                                _allMods[subInst.sourceModIndex].subAnimations[subInst.sourceSubAnimIndex];
+                            std::filesystem::path cycleJsonPath =
+                                animOriginSub.path.parent_path() / "CycleMoveset.json";
                             requiredFiles.insert(cycleJsonPath);
 
                             if (documents.find(cycleJsonPath) == documents.end()) {
@@ -1883,14 +1998,27 @@
 
                             rapidjson::Value* actorObj = nullptr;
                             for (auto& item : doc.GetArray()) {
-                                if (item.IsObject() && item.HasMember("Name") && item["Name"].GetString() == actorName) {
+                                if (item.IsObject() && item.HasMember("FormID") &&
+                                    item["FormID"].GetString() == actorFormID) {
                                     actorObj = &item;
                                     break;
                                 }
                             }
+
                             if (!actorObj) {
                                 rapidjson::Value newActorObj(rapidjson::kObjectType);
-                                newActorObj.AddMember("Name", rapidjson::Value(actorName.c_str(), allocator), allocator);
+                                newActorObj.AddMember("Name", rapidjson::Value(actorName.c_str(), allocator),
+                                                      allocator);
+                                // Para Player e NPCs Gerais, o FormID é o próprio nome para garantir unicidade
+                                newActorObj.AddMember(
+                                    "FormID",
+                                    rapidjson::Value(actorFormID.empty() ? actorName.c_str() : actorFormID.c_str(),
+                                                     allocator),
+                                    allocator);
+                                if (!actorPlugin.empty()) {
+                                    newActorObj.AddMember("Plugin", rapidjson::Value(actorPlugin.c_str(), allocator),
+                                                          allocator);
+                                }
                                 newActorObj.AddMember("Menu", rapidjson::kArrayType, allocator);
                                 doc.PushBack(newActorObj, allocator);
                                 actorObj = &doc.GetArray()[doc.Size() - 1];
@@ -1917,8 +2045,8 @@
                             rapidjson::Value& stancesArray = (*categoryObj)["stances"];
                             rapidjson::Value* stanceObj = nullptr;
                             for (auto& item : stancesArray.GetArray()) {
-                                // CORREÇÃO DO ERRO DE COMPILAÇÃO AQUI:
-                                if (item.IsObject() && item["index"].GetInt() == (i + 1) && item.HasMember("name") &&
+                                if (item.IsObject() && item.HasMember("index") && item["index"].GetInt() == (i + 1) &&
+                                    item.HasMember("name") &&
                                     strcmp(item["name"].GetString(), sourceMod.name.c_str()) == 0) {
                                     stanceObj = &item;
                                     break;
@@ -1938,12 +2066,14 @@
                             rapidjson::Value& animationsArray = (*stanceObj)["animations"];
                             rapidjson::Value animObj(rapidjson::kObjectType);
                             animObj.AddMember("index", animationIndexCounter++, allocator);
-                            animObj.AddMember("sourceModName", rapidjson::Value(animOriginMod.name.c_str(), allocator),
-                                              allocator);
+                            animObj.AddMember(
+                                "sourceModName",
+                                rapidjson::Value(_allMods[subInst.sourceModIndex].name.c_str(), allocator), allocator);
                             animObj.AddMember("sourceSubName", rapidjson::Value(animOriginSub.name.c_str(), allocator),
                                               allocator);
                             animObj.AddMember("sourceConfigPath",
-                                              rapidjson::Value(animOriginSub.path.string().c_str(), allocator), allocator);
+                                              rapidjson::Value(animOriginSub.path.string().c_str(), allocator),
+                                              allocator);
                             animObj.AddMember("pFront", subInst.pFront, allocator);
                             animObj.AddMember("pBack", subInst.pBack, allocator);
                             animObj.AddMember("pLeft", subInst.pLeft, allocator);
@@ -1963,6 +2093,16 @@
 
         processActorCategories(_categories, "Player");
         processActorCategories(_npcCategories, "NPCs");
+
+        for (const auto& npcPair : _specificNpcConfigs) {
+            RE::FormID npcFormID = npcPair.first;
+            const SpecificNpcConfig& npcConfig = npcPair.second;  // Acessa a struct
+
+            std::string npcFormIDStr = std::format("{:08X}", npcFormID);
+
+            // Chama a função com os dados diretamente da struct, sem precisar de uma nova busca
+            processActorCategories(npcConfig.categories, npcConfig.name, npcFormIDStr, npcConfig.pluginName);
+        }
 
         SKSE::log::info("Escrevendo {} arquivos CycleMoveset.json...", documents.size());
         for (const auto& pair : documents) {
@@ -1994,88 +2134,96 @@
         }
         SKSE::log::info("Salvamento de {} arquivos CycleMoveset.json concluído.", documents.size());
     }
+    // FIM DA SUBSTITUIÇÃO
 
+// INÍCIO DA SUBSTITUIÇÃO (Função LoadCycleMovesets)
     void AnimationManager::LoadCycleMovesets() {
         SKSE::log::info("Iniciando carregamento e fusão de arquivos CycleMoveset.json...");
 
-        // Limpa as instâncias existentes antes de carregar
         for (auto& pair : _categories) {
             for (auto& instance : pair.second.instances) instance.modInstances.clear();
         }
         for (auto& pair : _npcCategories) {
             for (auto& instance : pair.second.instances) instance.modInstances.clear();
         }
+        _specificNpcConfigs.clear();
 
-        // --- INÍCIO DA ALTERAÇÃO #1: ESTRUTURA DE DADOS TEMPORÁRIA (STAGING AREA) ---
-        // Estrutura para segurar os dados lidos antes de resolver conflitos de índice.
         struct RawAnimationEntry {
-            int playlistIndex;  // O 'index' original do JSON, usado para ordenar
+            int playlistIndex;
             SubAnimationInstance subAnimInstance;
         };
-
-        // Mapa de organização: [Categoria][Stance][MovesetName] -> Vetor de Animações
         using StagingArea = std::map<std::string, std::map<int, std::map<std::string, std::vector<RawAnimationEntry>>>>;
 
         StagingArea playerStaging, npcStaging;
-        // --- FIM DA ALTERAÇÃO #1 ---
+        std::map<RE::FormID, StagingArea> specificNpcStaging;
 
         const std::filesystem::path oarRootPath = "Data\\meshes\\actors\\character\\animations\\OpenAnimationReplacer";
         if (!std::filesystem::exists(oarRootPath)) {
-            SKSE::log::warn("Diretório do OpenAnimationReplacer não encontrado.");
+            SKSE::log::warn("Diretório do OAR não encontrado.");
             return;
         }
 
-        // --- FASE 1: LER TODOS OS ARQUIVOS E POPULAR A STAGING AREA ---
         for (const auto& entry : std::filesystem::recursive_directory_iterator(oarRootPath)) {
             if (entry.is_regular_file() && entry.path().filename() == "CycleMoveset.json") {
                 std::ifstream ifs(entry.path());
                 if (!ifs) continue;
-
                 std::string jsonContent((std::istreambuf_iterator<char>(ifs)), {});
                 ifs.close();
-
                 rapidjson::Document doc;
                 doc.Parse(jsonContent.c_str());
-
                 if (doc.HasParseError() || !doc.IsArray()) continue;
 
                 for (const auto& entity : doc.GetArray()) {
-                    if (!entity.IsObject() || !entity.HasMember("Name") || !entity.HasMember("Menu")) continue;
+                    if (!entity.IsObject() || !entity.HasMember("FormID") || !entity.HasMember("Menu") ||
+                        !entity.HasMember("Name"))
+                        continue;
 
-                    std::string actorName = entity["Name"].GetString();
-                    StagingArea* targetStaging =
-                        (actorName == "Player") ? &playerStaging : (actorName == "NPCs" ? &npcStaging : nullptr);
-                    if (!targetStaging) continue;
-
+                    std::string actorFormIDStr = entity["FormID"].GetString();
                     const rapidjson::Value& menu = entity["Menu"];
                     if (!menu.IsArray()) continue;
 
+                    StagingArea* targetStaging = nullptr;
+                    if (actorFormIDStr == "Player") {
+                        targetStaging = &playerStaging;
+                    } else if (actorFormIDStr == "NPCs") {
+                        targetStaging = &npcStaging;
+                    } else {
+                        try {
+                            RE::FormID specificNpcId = std::stoul(actorFormIDStr, nullptr, 16);
+                            // Pré-inicializa a entrada para armazenar o nome e plugin
+                            _specificNpcConfigs[specificNpcId].name = entity["Name"].GetString();
+                            if (entity.HasMember("Plugin")) {
+                                _specificNpcConfigs[specificNpcId].pluginName = entity["Plugin"].GetString();
+                            }
+                            targetStaging = &specificNpcStaging[specificNpcId];
+                        } catch (const std::exception&) {
+                            continue;
+                        }
+                    }
+
+                    if (!targetStaging) continue;
+
+                    // O resto da lógica de leitura interna é a mesma
                     for (const auto& categoryJson : menu.GetArray()) {
                         if (!categoryJson.IsObject() || !categoryJson.HasMember("Category") ||
                             !categoryJson.HasMember("stances"))
                             continue;
                         std::string categoryName = categoryJson["Category"].GetString();
-
                         for (const auto& stanceJson : categoryJson["stances"].GetArray()) {
                             if (!stanceJson.IsObject() || !stanceJson.HasMember("index") ||
                                 !stanceJson.HasMember("name") || !stanceJson.HasMember("animations"))
                                 continue;
                             int stanceIndex = stanceJson["index"].GetInt();
                             if (stanceIndex < 1 || stanceIndex > 4) continue;
-
                             std::string movesetName = stanceJson["name"].GetString();
-
                             for (const auto& animJson : stanceJson["animations"].GetArray()) {
                                 if (!animJson.IsObject() || !animJson.HasMember("index")) continue;
-
                                 SubAnimationInstance newSubInstance;
-                                // Preenche os dados do sub-moveset...
-                                std::string subModName = animJson["sourceModName"].GetString();
-                                std::string subAnimName = animJson["sourceSubName"].GetString();
-                                auto subModIdxOpt = FindModIndexByName(subModName);
+                                auto subModIdxOpt = FindModIndexByName(animJson["sourceModName"].GetString());
                                 if (subModIdxOpt) {
                                     newSubInstance.sourceModIndex = *subModIdxOpt;
-                                    auto subAnimIdxOpt = FindSubAnimIndexByName(*subModIdxOpt, subAnimName);
+                                    auto subAnimIdxOpt =
+                                        FindSubAnimIndexByName(*subModIdxOpt, animJson["sourceSubName"].GetString());
                                     if (subAnimIdxOpt) {
                                         newSubInstance.sourceSubAnimIndex = *subAnimIdxOpt;
                                     } else {
@@ -2084,8 +2232,6 @@
                                 } else {
                                     continue;
                                 }
-
-                                // Carrega o estado das checkboxes
                                 if (animJson.HasMember("pFront")) newSubInstance.pFront = animJson["pFront"].GetBool();
                                 if (animJson.HasMember("pBack")) newSubInstance.pBack = animJson["pBack"].GetBool();
                                 if (animJson.HasMember("pLeft")) newSubInstance.pLeft = animJson["pLeft"].GetBool();
@@ -2101,11 +2247,9 @@
                                 if (animJson.HasMember("pRandom"))
                                     newSubInstance.pRandom = animJson["pRandom"].GetBool();
                                 if (animJson.HasMember("pDodge")) newSubInstance.pDodge = animJson["pDodge"].GetBool();
-
                                 RawAnimationEntry rawEntry;
                                 rawEntry.playlistIndex = animJson["index"].GetInt();
                                 rawEntry.subAnimInstance = newSubInstance;
-
                                 (*targetStaging)[categoryName][stanceIndex - 1][movesetName].push_back(rawEntry);
                             }
                         }
@@ -2114,31 +2258,21 @@
             }
         }
 
-        // --- FASE 2: PROCESSAR A STAGING AREA, ORDENAR E CONSTRUIR A ESTRUTURA FINAL ---
         auto processStagedData = [&](StagingArea& staging, std::map<std::string, WeaponCategory>& targetCategories) {
             for (auto& catPair : staging) {
-                const std::string& categoryName = catPair.first;
-                auto categoryIt = targetCategories.find(categoryName);
+                auto categoryIt = targetCategories.find(catPair.first);
                 if (categoryIt == targetCategories.end()) continue;
-
                 for (auto& stancePair : catPair.second) {
                     int stanceIndex = stancePair.first;
                     CategoryInstance& targetInstance = categoryIt->second.instances[stanceIndex];
-
                     for (auto& movesetPair : stancePair.second) {
-                        const std::string& movesetName = movesetPair.first;
                         auto& rawEntries = movesetPair.second;
-
-                        // Ordena as animações pelo 'index' original
                         std::sort(rawEntries.begin(), rawEntries.end(),
                                   [](const RawAnimationEntry& a, const RawAnimationEntry& b) {
                                       return a.playlistIndex < b.playlistIndex;
                                   });
-
-                        // Encontra ou cria o ModInstance final
-                        auto modIdxOpt = FindModIndexByName(movesetName);
+                        auto modIdxOpt = FindModIndexByName(movesetPair.first);
                         if (!modIdxOpt) continue;
-
                         ModInstance* modInstancePtr = nullptr;
                         for (auto& mi : targetInstance.modInstances) {
                             if (mi.sourceModIndex == *modIdxOpt) {
@@ -2151,8 +2285,6 @@
                             modInstancePtr = &targetInstance.modInstances.back();
                             modInstancePtr->sourceModIndex = *modIdxOpt;
                         }
-
-                        // Adiciona as animações ordenadas à lista final
                         for (const auto& entry : rawEntries) {
                             modInstancePtr->subAnimationInstances.push_back(entry.subAnimInstance);
                         }
@@ -2164,9 +2296,25 @@
         processStagedData(playerStaging, _categories);
         processStagedData(npcStaging, _npcCategories);
 
+        std::map<std::string, WeaponCategory> cleanCategoriesTemplate;
+        for (const auto& pair : _categories) {
+            cleanCategoriesTemplate[pair.first] = pair.second;
+            for (auto& instance : cleanCategoriesTemplate[pair.first].instances) {
+                instance.modInstances.clear();
+            }
+        }
+
+        for (auto& specificPair : specificNpcStaging) {
+            RE::FormID npcID = specificPair.first;
+            StagingArea& stagingData = specificPair.second;
+            _specificNpcConfigs[npcID].categories = cleanCategoriesTemplate;
+            processStagedData(stagingData, _specificNpcConfigs.at(npcID).categories);
+        }
+
         SKSE::log::info("Carregamento e fusão de movesets concluído.");
         UpdateMaxMovesetCache();
     }
+    // FIM DA SUBSTITUIÇÃO
 
     void AnimationManager::SaveNPCSettings() {
         SKSE::log::info("Iniciando salvamento das configurações dos NPCs...");
@@ -3238,7 +3386,7 @@
         }
     }
 
-void AnimationManager::DrawCategoryManager() {
+    void AnimationManager::DrawCategoryManager() {
         if (ImGui::Button("Create New Category")) {
             _categoryToEditPtr = nullptr;  // Garante que estamos no modo de criação
             // Limpa os buffers para um formulário novo
@@ -3402,3 +3550,152 @@ void AnimationManager::DrawCategoryManager() {
         exclusionAndBlock.AddMember("Conditions", innerExclusionConditions, allocator);
         parentArray.PushBack(exclusionAndBlock, allocator);
     }
+
+    void AnimationManager::PopulateNpcList() {
+        SKSE::log::info("Iniciando escaneamento de todos os NPCs...");
+        _fullNpcList.clear();
+        _pluginList.clear();
+        std::set<std::string> uniquePlugins;
+
+        auto dataHandler = RE::TESDataHandler::GetSingleton();
+        if (!dataHandler) {
+            SKSE::log::error("Falha ao obter o TESDataHandler.");
+            return;
+        }
+
+        const auto& npcArray = dataHandler->GetFormArray<RE::TESNPC>();
+        for (const auto& npc : npcArray) {
+            if (npc && !npc->IsPlayer() && npc->GetFile(0)) {
+                NPCInfo info;
+                info.formID = npc->GetFormID();
+
+                // --- INÍCIO DA ALTERAÇÃO ---
+                // Substituído npc->GetFormEditorID() pela chamada da clib_util para maior robustez.
+                info.editorID = clib_util::editorID::get_editorID(npc);
+                // --- FIM DA ALTERAÇÃO ---
+
+                info.name = npc->GetName();
+
+                auto plugin = npc->GetFile(0)->GetFilename();
+                info.pluginName = std::string(plugin);
+
+                _fullNpcList.push_back(info);
+                uniquePlugins.insert(info.pluginName);
+            }
+        }
+
+        _pluginList.push_back("Todos");
+        for (const auto& pluginName : uniquePlugins) {
+            _pluginList.push_back(pluginName);
+        }
+
+        _npcListPopulated = true;
+        SKSE::log::info("Escaneamento concluído. {} NPCs carregados de {} plugins.", _fullNpcList.size(),
+                        uniquePlugins.size());
+    }
+
+    
+// INÍCIO DA SUBSTITUIÇÃO (Função DrawNpcSelectionModal)
+    void AnimationManager::DrawNpcSelectionModal() {
+        if (_isNpcSelectionModalOpen) {
+            ImGui::OpenPopup("Selecionar NPC Específico");
+        }
+
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImVec2 center = ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f, viewport->Pos.y + viewport->Size.y * 0.5f);
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * 0.7f, viewport->Size.y * 0.7f));
+
+        if (ImGui::BeginPopupModal("Selecionar NPC Específico", &_isNpcSelectionModalOpen, ImGuiWindowFlags_None)) {
+            if (!_npcListPopulated) {
+                PopulateNpcList();
+            }
+
+            ImGui::InputText("Filtrar por Nome/EditorID/FormID", _npcFilterBuffer, sizeof(_npcFilterBuffer));
+            ImGui::SameLine();
+            std::vector<const char*> pluginNamesCStr;
+            for (const auto& name : _pluginList) {
+                pluginNamesCStr.push_back(name.c_str());
+            }
+            ImGui::PushItemWidth(200);
+            ImGui::Combo("Plugin", &_selectedPluginIndex, pluginNamesCStr.data(), pluginNamesCStr.size());
+            ImGui::PopItemWidth();
+            ImGui::Separator();
+
+            if (ImGui::BeginTable("NpcListTable", 4,
+                                  ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
+                ImGui::TableSetupColumn("Nome", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("EditorID", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("FormID", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                ImGui::TableSetupColumn("Configurar", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableHeadersRow();
+
+                std::string filterText = _npcFilterBuffer;
+                std::transform(filterText.begin(), filterText.end(), filterText.begin(), ::tolower);
+                std::string selectedPlugin = _pluginList[_selectedPluginIndex];
+
+                for (const auto& npc : _fullNpcList) {
+                    if (_selectedPluginIndex != 0 && npc.pluginName != selectedPlugin) continue;
+                    std::string formIdStr = std::format("{:08X}", npc.formID);
+                    std::string nameLower = npc.name;
+                    std::string editorIdLower = npc.editorID;
+                    std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+                    std::transform(editorIdLower.begin(), editorIdLower.end(), editorIdLower.begin(), ::tolower);
+                    if (!filterText.empty() && nameLower.find(filterText) == std::string::npos &&
+                        editorIdLower.find(filterText) == std::string::npos &&
+                        formIdStr.find(filterText) == std::string::npos) {
+                        continue;
+                    }
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", npc.name.c_str());
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", npc.editorID.c_str());
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", formIdStr.c_str());
+                    ImGui::TableNextColumn();
+
+                    bool isConfigured = _specificNpcConfigs.count(npc.formID);
+                    ImGui::PushID(npc.formID);
+                    if (ImGui::Checkbox("##configured", &isConfigured)) {
+                        if (isConfigured) {
+                            // Lógica de criação de um novo NPC específico
+                            SpecificNpcConfig newConfig;
+                            newConfig.name = npc.name;
+                            newConfig.pluginName = npc.pluginName;
+
+                            // Cria um template de categorias limpas para o novo NPC
+                            std::map<std::string, WeaponCategory> cleanCategoriesTemplate;
+                            for (const auto& pair : _categories) {
+                                cleanCategoriesTemplate[pair.first] = pair.second;
+                                for (auto& instance : cleanCategoriesTemplate[pair.first].instances) {
+                                    instance.modInstances.clear();
+                                }
+                            }
+                            newConfig.categories = cleanCategoriesTemplate;
+
+                            _specificNpcConfigs[npc.formID] = newConfig;
+                            SKSE::log::info("NPC Específico adicionado: {} ({:08X})", npc.name, npc.formID);
+                        } else {
+                            _specificNpcConfigs.erase(npc.formID);
+                            if (_currentlySelectedNpcFormID == npc.formID) {
+                                _currentlySelectedNpcFormID = 0;
+                            }
+                            SKSE::log::info("Configuração do NPC Específico removida: {} ({:08X})", npc.name,
+                                            npc.formID);
+                        }
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::EndTable();
+            }
+
+            ImGui::Separator();
+            if (ImGui::Button("Fechar", ImVec2(120, 0))) {
+                _isNpcSelectionModalOpen = false;
+            }
+            ImGui::EndPopup();
+        }
+    }
+    // FIM DA SUBSTITUIÇÃO

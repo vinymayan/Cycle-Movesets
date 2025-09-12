@@ -206,6 +206,46 @@ private:
     // ---> FIM DAS ADIÇÕES <---
 
     std::map<std::string, bool> _newMovesetCategorySelection;
+
+    struct NPCInfo {
+        RE::FormID formID;
+        std::string editorID;
+        std::string name;
+        std::string pluginName;
+    };
+
+    // --- Variáveis para o novo Modal de Seleção de NPC ---
+
+    // Lista completa de todos os NPCs encontrados no jogo
+    std::vector<NPCInfo> _fullNpcList;
+    // Lista de plugins (.esp) únicos para popular o filtro
+    std::vector<std::string> _pluginList;
+    // Flag para garantir que o escaneamento pesado só rode uma vez
+    bool _npcListPopulated = false;
+    // Flag para controlar a visibilidade do modal
+    bool _isNpcSelectionModalOpen = false;
+    // Buffer para o texto do filtro de pesquisa de NPC
+    char _npcFilterBuffer[128] = "";
+    // Índice do plugin selecionado no filtro
+    int _selectedPluginIndex = 0;
+
+    // Onde as configurações de NPCs específicos serão armazenadas (FormID -> Configurações)
+    // A configuração é um mapa de Categoria -> Dados da Categoria, espelhando _categories
+    struct SpecificNpcConfig {
+        std::string name;
+        std::string pluginName;
+        std::map<std::string, WeaponCategory> categories;
+    };
+
+    // Substitua a declaração antiga de _specificNpcConfigs por esta:
+    std::map<RE::FormID, SpecificNpcConfig> _specificNpcConfigs;
+
+    // --- Novas Funções Privadas ---
+    void PopulateNpcList();
+    void DrawNpcSelectionModal();
+
+    RE::FormID _currentlySelectedNpcFormID = 0;
+    std::vector<const char*> _npcSelectorList;
 };
 
 struct FileSaveConfig {
@@ -215,7 +255,8 @@ struct FileSaveConfig {
     // Campos adicionados para carregar o estado das checkboxes
     bool isParent = false;
     bool isNPC = false;
-
+    RE::FormID npcFormID = 0;
+    std::string pluginName;
     bool pFront = false;
     bool pBack = false;
     bool pLeft = false;
