@@ -52,63 +52,64 @@
             return;
         }
 
-        if (!doc.IsObject() || !doc.HasMember("pathDar") || !doc["pathDar"].IsString()) {
-            SKSE::log::error("'pathDar' não encontrado ou inválido em {}", cycleDarJsonPath.string());
-            return;
-        }
-
-
-        // 4. Constrói os caminhos
-        std::string relativePath = doc["pathDar"].GetString();
-        std::filesystem::path sourcePath = "Data" / std::filesystem::path(relativePath);
+        int filesCopied = 0;
         std::filesystem::path destinationPath = cycleDarJsonPath.parent_path();
 
-        if (!std::filesystem::exists(sourcePath) || !std::filesystem::is_directory(sourcePath)) {
-            SKSE::log::warn("Pasta de origem não existe: {}", sourcePath.string());
-            return;
-        }
+        // NOVA LÓGICA DE PROCESSAMENTO DE FONTES MÚLTIPLAS
+        auto processSource = [&](const std::string& relativePath, const rapidjson::Value* filesToCopyArray) {
+            std::filesystem::path sourcePath = "Data" / std::filesystem::path(relativePath);
+            if (!std::filesystem::exists(sourcePath) || !std::filesystem::is_directory(sourcePath)) {
+                SKSE::log::warn("Pasta de origem não existe ou não é um diretório: {}", sourcePath.string());
+                return;
+            }
 
-        SKSE::log::info("Copiando arquivos de '{}' para '{}'", sourcePath.string(), destinationPath.string());
-        int filesCopied = 0;
+            SKSE::log::info("Copiando arquivos de '{}' para '{}'", sourcePath.string(), destinationPath.string());
 
-        // 5. NOVA LÓGICA: VERIFICA A LISTA DE ARQUIVOS
-        bool copyAll = true;  // Flag para determinar o modo de cópia
-        if (doc.HasMember("filesToCopy") && doc["filesToCopy"].IsArray() && !doc["filesToCopy"].Empty()) {
-            copyAll = false;
-        }
-
-        if (copyAll) {
-            SKSE::log::info("Modo: Copiando todos os arquivos .hkx da pasta.");
-            // Itera e copia todos os arquivos .hkx (comportamento original)
-            for (const auto& fileEntry : std::filesystem::directory_iterator(sourcePath)) {
-                if (fileEntry.is_regular_file()) {
-                    std::string extension = fileEntry.path().extension().string();
-                    std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-                    if (extension == ".hkx") {
+            if (filesToCopyArray && filesToCopyArray->IsArray() && !filesToCopyArray->Empty()) {
+                // Modo: Copia arquivos especificados na lista
+                SKSE::log::info("Modo: Copiando arquivos especificados na lista 'filesToCopy'.");
+                for (const auto& fileValue : filesToCopyArray->GetArray()) {
+                    if (fileValue.IsString()) {
+                        std::filesystem::path sourceFile = sourcePath / fileValue.GetString();
+                        if (std::filesystem::exists(sourceFile)) {
+                            CopySingleFile(sourceFile, destinationPath, filesCopied);
+                        } else {
+                            SKSE::log::warn("Arquivo especificado não encontrado na origem: {}", sourceFile.string());
+                        }
+                    }
+                }
+            } else {
+                // Modo: Copia todos os .hkx (comportamento padrão)
+                SKSE::log::info("Modo: Copiando todos os arquivos .hkx da pasta.");
+                for (const auto& fileEntry : std::filesystem::directory_iterator(sourcePath)) {
+                    if (fileEntry.is_regular_file() && fileEntry.path().extension() == ".hkx") {
                         CopySingleFile(fileEntry.path(), destinationPath, filesCopied);
                     }
                 }
             }
-        } else {
-            SKSE::log::info("Modo: Copiando arquivos especificados na lista 'filesToCopy'.");
-            const rapidjson::Value& filesArray = doc["filesToCopy"];
-            for (rapidjson::SizeType i = 0; i < filesArray.Size(); i++) {
-                if (filesArray[i].IsString()) {
-                    std::string filename = filesArray[i].GetString();
-                    std::filesystem::path sourceFile = sourcePath / filename;
+        };
 
-                    if (std::filesystem::exists(sourceFile)) {
-                        CopySingleFile(sourceFile, destinationPath, filesCopied);
-                    } else {
-                        SKSE::log::warn("Arquivo especificado não encontrado na origem: {}", sourceFile.string());
-                    }
+        if (doc.HasMember("sources") && doc["sources"].IsArray()) {
+            // NOVO FORMATO: Processa o array "sources"
+            for (const auto& sourceObj : doc["sources"].GetArray()) {
+                if (sourceObj.IsObject() && sourceObj.HasMember("path") && sourceObj["path"].IsString()) {
+                    const rapidjson::Value* filesArray =
+                        sourceObj.HasMember("filesToCopy") ? &sourceObj["filesToCopy"] : nullptr;
+                    processSource(sourceObj["path"].GetString(), filesArray);
                 }
             }
+        } else if (doc.HasMember("pathDar") && doc["pathDar"].IsString()) {
+            // FORMATO ANTIGO (LEGADO): Para manter compatibilidade
+            const rapidjson::Value* filesArray = doc.HasMember("filesToCopy") ? &doc["filesToCopy"] : nullptr;
+            processSource(doc["pathDar"].GetString(), filesArray);
+        } else {
+            SKSE::log::error("Formato de CycleDar.json inválido ou não reconhecido em {}", cycleDarJsonPath.string());
+            return;
         }
 
         SKSE::log::info("Cópia concluída. {} arquivos movidos.", filesCopied);
 
-        // >>> INÍCIO DA ADIÇÃO 1: LÓGICA DE CONVERSÃO PARA BFCO <<<
+        // Lógica de conversão para BFCO (inalterada)
         bool shouldConvertToBFCO = false;
         if (doc.HasMember("convertBFCO") && doc["convertBFCO"].IsBool()) {
             shouldConvertToBFCO = doc["convertBFCO"].GetBool();
@@ -120,25 +121,16 @@
             for (const auto& fileEntry : std::filesystem::directory_iterator(destinationPath)) {
                 if (fileEntry.is_regular_file()) {
                     std::string filename = fileEntry.path().filename().string();
-                    std::string lowerFilename = filename;
-                    std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(),
-                                   [](unsigned char c) { return std::tolower(c); });
-
-                    if (lowerFilename.find("mco_") != std::string::npos) {
+                    if (filename.rfind("mco_", 0) == 0) {
                         std::string newFilename = filename;
-                        // Substitui a primeira ocorrência de "mco_" por "BFCO_"
-                        size_t pos = newFilename.find("mco_");
-                        if (pos != std::string::npos) {
-                            newFilename.replace(pos, 4, "BFCO_");
-
-                            std::filesystem::path newFilePath = destinationPath / newFilename;
-                            try {
-                                std::filesystem::rename(fileEntry.path(), newFilePath);
-                                filesRenamed++;
-                            } catch (const std::filesystem::filesystem_error& e) {
-                                SKSE::log::error("Falha ao renomear {} para {}. Erro: {}", fileEntry.path().string(),
-                                                 newFilePath.string(), e.what());
-                            }
+                        newFilename.replace(0, 4, "BFCO_");
+                        std::filesystem::path newFilePath = destinationPath / newFilename;
+                        try {
+                            std::filesystem::rename(fileEntry.path(), newFilePath);
+                            filesRenamed++;
+                        } catch (const std::filesystem::filesystem_error& e) {
+                            SKSE::log::error("Falha ao renomear {} para {}. Erro: {}", fileEntry.path().string(),
+                                             newFilePath.string(), e.what());
                         }
                     }
                 }
@@ -146,7 +138,7 @@
             SKSE::log::info("Conversão BFCO concluída. {} arquivos renomeados.", filesRenamed);
         }
 
-        // 6. Atualiza o JSON e salva no arquivo
+        // Lógica de atualização do JSON (inalterada)
         if (doc.HasMember("conversionDone")) {
             doc["conversionDone"].SetBool(true);
         } else {
@@ -245,21 +237,21 @@
         std::vector<CategoryDefinition> categoryDefinitions = {
             // Single-Wield
             {"Sword", 1.0, 0.0, false, {}, {}},
-            {"Dagger", 2.0, 0.0, false, {}, {}},
-            {"War Axe", 3.0, 0.0, false, {}, {}},
-            {"Mace", 4.0, 0.0, false, {}, {}},
-            {"Greatsword", 5.0, -1.0, false, {}, {}},
-            {"Battleaxe", 6.0, -1.0, false, {}, {}},
-            {"Warhammer", 10.0, -1.0, false, {}, {}},
+            {"Dagger", 2.0, 0.0, false, false, {}, {}},
+            {"War Axe", 3.0, 0.0, false, false, {}, {}},
+            {"Mace", 4.0, 0.0, false, false, {}, {}},
+            {"Greatsword", 5.0, -1.0, false, false, {}, {}},
+            {"Battleaxe", 6.0, -1.0, false, false, {}, {}},
+            {"Warhammer", 10.0, -1.0, false, false, {}, {}},
             // Shield
-            //{"Shield", -1.0, 11.0, false, {}, {}},
-            {"Sword & Shield", 1.0, 11.0, false, {}, {}},
-            {"Dagger & Shield", 2.0, 11.0, false, {}, {}},
-            {"War Axe & Shield", 3.0, 11.0, false, {}, {}},
-            {"Mace & Shield", 4.0, 11.0, false, {}, {}},
-            {"Greatsword & Shield", 5.0, 11.0, false, {}, {}},
-            {"Battleaxe & Shield", 6.0, 11.0, false, {}, {}},
-            {"Warhammer & Shield", 10.0, 11.0, false, {}, {}},
+            //{"Shield", -1.0, 11.0, false, true, {}, {}},
+            {"Sword & Shield", 1.0, 11.0, false, true, {}, {}},
+            {"Dagger & Shield", 2.0, 11.0, false, true, {}, {}},
+            {"War Axe & Shield", 3.0, 11.0, false, true, {}, {}},
+            {"Mace & Shield", 4.0, 11.0, false, true, {}, {}},
+            {"Greatsword & Shield", 5.0, 11.0, false, true, {}, {}},
+            {"Battleaxe & Shield", 6.0, 11.0, false, true, {}, {}},
+            {"Warhammer & Shield", 10.0, 11.0, false, true, {}, {}},
             // Dual-Wield
             {"Dual Sword", 1.0, 1.0, true, {}, {}},
             {"Dual Dagger", 2.0, 2.0, true, {}, {}},
@@ -390,7 +382,7 @@
         if (ImGui::BeginPopupModal(LOC("add_moveset"), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text(LOC("library"));
             ImGui::Separator();
-            ImGui::InputText("Filter", _movesetFilter, 128);
+            ImGui::InputText(LOC("filter"), _movesetFilter, 128);
             if (ImGui::BeginChild("BibliotecaMovesets", ImVec2(modal_list_size), true)) {
                 std::string filter_str = _movesetFilter;
                 std::transform(filter_str.begin(), filter_str.end(), filter_str.begin(), ::tolower);
@@ -430,7 +422,7 @@
         if (ImGui::BeginPopupModal(LOC("add_animation"), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text(LOC("library"));
             ImGui::Separator();
-            ImGui::InputText("Filter", _subMovesetFilter, 128);
+            ImGui::InputText(LOC("filter"), _subMovesetFilter, 128);
 
             if (ImGui::BeginChild("BibliotecaSubMovesets", ImVec2(modal_list_size), true)) {
                 std::string filter_str = _subMovesetFilter;
@@ -468,12 +460,12 @@
                                 
 
                                     // <-- CORREÇÃO 1: Alinha o botão à direita com um espaçamento.
-                                    float button_width = 100.0f;
+                                    float button_width = 200.0f;
 
                                     ImVec2 content_avail;
                                     ImGui::GetContentRegionAvail(&content_avail);  // Pega a região disponível
 
-                                    if (ImGui::Button(LOC("add_moveset"), ImVec2(button_width, 0))) {
+                                    if (ImGui::Button(LOC("add"))) {
                                         SubAnimationInstance newSubInstance;
                                         newSubInstance.sourceModIndex = modIdx;
                                         newSubInstance.sourceSubAnimIndex = subAnimIdx;
@@ -494,6 +486,7 @@
                                                      subAnimDef.name.c_str());
 
                                             // Adiciona a nova instância completa ao vetor
+                                            PopulateHkxFiles(newInstance);
                                             _stanceToAddTo->subMovesets.push_back(newInstance);
                                         }
 
@@ -541,7 +534,7 @@
             //    DrawUserMovesetManager();  // Chama a UI da segunda aba
             //    ImGui::EndTabItem();
             //}
-            if (ImGui::BeginTabItem("Category Manager")) {
+            if (ImGui::BeginTabItem(LOC("category_manager"))) {
                 DrawCategoryManager();
                 ImGui::EndTabItem();
             }
@@ -558,28 +551,28 @@
 
     // Nova função para desenhar a interface de criação de movesets
     void AnimationManager::DrawUserMovesetCreator() {
-        ImGui::Text("Ferramenta de Criação de Moveset");
+        ImGui::Text("Moveset Creator");
         ImGui::Separator();
 
         // Seção de botões principais
-        if (ImGui::Button("Salvar Novo Moveset")) {
+        if (ImGui::Button(LOC("save"))) {
             SaveUserMoveset();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Ler Animações DAR")) {
+        if (ImGui::Button("Read DAR animations")) {
             ScanDarAnimations();
         }
         ImGui::Separator();
 
         // Campos de Informação do Moveset
-        ImGui::InputText("Nome do Moveset", _newMovesetName, sizeof(_newMovesetName));
-        ImGui::InputText("Autor", _newMovesetAuthor, sizeof(_newMovesetAuthor));
-        ImGui::InputText("Descrição", _newMovesetDesc, sizeof(_newMovesetDesc));
+        ImGui::InputText("Moveset Name", _newMovesetName, sizeof(_newMovesetName));
+        ImGui::InputText("Author", _newMovesetAuthor, sizeof(_newMovesetAuthor));
+        ImGui::InputText("Descripton", _newMovesetDesc, sizeof(_newMovesetDesc));
 
         ImGui::Separator();
 
-        ImGui::Text("1. Selecione as Categorias para este Moveset");
-        ImGui::InputText("Filtrar Categorias", _categoryFilterBuffer, sizeof(_categoryFilterBuffer));
+        ImGui::Text("Select categories");
+        ImGui::InputText(LOC("filter"), _categoryFilterBuffer, sizeof(_categoryFilterBuffer));
         if (ImGui::BeginChild("CategorySelector", ImVec2(0, 150), true)) {
             std::string filter_str = _categoryFilterBuffer;
             std::transform(filter_str.begin(), filter_str.end(), filter_str.begin(), ::tolower);
@@ -600,7 +593,7 @@
         ImGui::EndChild();
         ImGui::Separator();
 
-        ImGui::Text("2. Configure os Sub-Movesets para cada Categoria e Stance");
+        ImGui::Text("Add animations");
 
         for (auto const& [categoryName, isSelected] : _newMovesetCategorySelection) {
             if (isSelected) {
@@ -616,7 +609,7 @@
                         for (int i = 0; i < 4; ++i) {
                             std::string stanceTabName = std::format("Stance {}", i + 1);
                             if (ImGui::BeginTabItem(stanceTabName.c_str())) {
-                                if (ImGui::Button(std::format("Adicionar Sub-Moveset à Stance {}", i + 1).c_str())) {
+                                if (ImGui::Button(std::format("Add animation to {}", i + 1).c_str())) {
                                     _isAddModModalOpen = true;
                                     _stanceToAddTo = &stances[i];
                                     _instanceToAddTo = nullptr;
@@ -624,7 +617,7 @@
                                     _userMovesetToAddTo = nullptr;
                                 }
                                 ImGui::SameLine();
-                                if (ImGui::Button(std::format("Adicionar Animação (DAR) à Stance {}", i + 1).c_str())) {
+                                if (ImGui::Button(std::format("Add DAR animation to {}", i + 1).c_str())) {
                                     _isAddDarModalOpen = true;
                                     _stanceToAddTo = &stances[i];
                                     _instanceToAddTo = nullptr;
@@ -664,7 +657,7 @@
                                     ImGui::SameLine();
                                     ImGui::Text("<- %s", subInst.sourceDef->name.c_str());
                                     ImGui::SameLine();
-                                    ImGui::Checkbox("BFCO", &subInst.isBFCO);
+                                    ImGui::Checkbox("ToBFCO", &subInst.isBFCO);
 
                                     ImGui::Indent();
                                     ImGui::Checkbox("F", &subInst.pFront);
@@ -687,6 +680,26 @@
                                     ImGui::SameLine();
                                     ImGui::Checkbox("Movement", &subInst.pDodge);
                                     ImGui::Unindent();
+
+                                    // Seção para gerenciar arquivos .hkx individuais
+                                    if (!subInst.hkxFileSelection.empty()) {
+                                        int selectedCount = 0;
+                                        for (const auto& pair : subInst.hkxFileSelection) {
+                                            if (pair.second) selectedCount++;
+                                        }
+                                        
+                                        if (ImGui::CollapsingHeader("Manage Animation Files")) {
+                                            ImGui::Indent();
+                                            ImGui::TextDisabled("Deselect files you do not want to include:");
+                                            if (ImGui::BeginChild("HkxFilesChild", ImVec2(0, 300), true)) {
+                                                for (auto& [filename, isFileSelected] : subInst.hkxFileSelection) {
+                                                    ImGui::Checkbox(filename.c_str(), &isFileSelected);
+                                                }
+                                            }
+                                            ImGui::EndChild();
+                                            ImGui::Unindent();
+                                        }
+                                    }
 
                                     ImGui::PopID();
                                     ImGui::Separator();
@@ -738,15 +751,31 @@
         return 0;
     }
 
-    int AnimationManager::GetMaxMovesetsForNPC(const std::string& category, int stanceIndex) {
+    int AnimationManager::GetMaxMovesetsForNPC(RE::FormID npcFormID, const std::string& category, int stanceIndex) {
         if (stanceIndex < 0 || stanceIndex >= 4) {
             return 0;
         }
-        // Procura a categoria no novo mapa de NPCs
-        auto it = _maxMovesetsPerCategory_NPC.find(category);
-        if (it != _maxMovesetsPerCategory_NPC.end()) {
-            // Se encontrou, retorna o valor para a stance específica
-            return it->second[stanceIndex];
+        // 1. Tenta encontrar a configuração para o NPC ESPECÍFICO
+        auto specificNpcIt = _maxMovesetsPerCategory_NPC.find(npcFormID);
+        if (specificNpcIt != _maxMovesetsPerCategory_NPC.end()) {
+            // Encontrou o FormID do NPC no cache
+            const auto& categoriesForNpc = specificNpcIt->second;
+            auto categoryIt = categoriesForNpc.find(category);
+            if (categoryIt != categoriesForNpc.end()) {
+                // Encontrou a categoria para este NPC específico, retorna a contagem
+                return categoryIt->second[stanceIndex];
+            }
+        }
+
+        // 2. Se não encontrou para o NPC específico, usa o FALLBACK para NPCs GERAIS (FormID 0)
+        auto generalNpcIt = _maxMovesetsPerCategory_NPC.find(0);
+        if (generalNpcIt != _maxMovesetsPerCategory_NPC.end()) {
+            const auto& generalCategories = generalNpcIt->second;
+            auto categoryIt = generalCategories.find(category);
+            if (categoryIt != generalCategories.end()) {
+                // Encontrou a categoria nas configurações gerais, retorna a contagem
+                return categoryIt->second[stanceIndex];
+            }
         }
         // Se não encontrou a categoria, não há movesets
         return 0;
@@ -821,7 +850,7 @@
 
                             if (ImGui::BeginDragDropSource()) {
                                 ImGui::SetDragDropPayload("DND_MOD_INSTANCE", &mod_i, sizeof(size_t));
-                                ImGui::Text("Mover moveset %s", sourceMod.name.c_str());
+                                ImGui::Text("Move moveset %s", sourceMod.name.c_str());
                                 ImGui::EndDragDropSource();
                             }
                             if (ImGui::BeginDragDropTarget()) {
@@ -887,7 +916,7 @@
 
                                     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                                         ImGui::SetDragDropPayload("DND_SUB_INSTANCE", &sub_j, sizeof(size_t));
-                                        ImGui::Text("Mover %s", originSubAnim.name.c_str());
+                                        ImGui::Text("Move %s", originSubAnim.name.c_str());
                                         ImGui::EndDragDropSource();
                                     }
                                     if (ImGui::BeginDragDropTarget()) {
@@ -1010,10 +1039,10 @@
         }
 
         if(ImGui::BeginTabBar("WeaponTypeTabs")) {
-            if (ImGui::BeginTabItem("Single-Wield")) {
+            if (ImGui::BeginTabItem(LOC("tab_single_wield"))) {
                 for (auto& pair : _categories) {
                     WeaponCategory& category = pair.second;
-                    if (!category.isDualWield) {  // Filtro
+                    if (!category.isDualWield && !category.isShieldCategory) {  // Filtro
                         DrawCategoryUI(pair.second);
                     }
                 }
@@ -1024,6 +1053,16 @@
                     WeaponCategory& category = pair.second;
                     if (category.isDualWield) {  // Filtro
                         DrawCategoryUI(pair.second);
+                    }
+                }
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem(LOC("tab_shield"))) {  
+                for (auto& pair : _categories) {
+                    WeaponCategory& category = pair.second;
+                    if (category.isShieldCategory) {
+                        DrawCategoryUI(pair.second);
+
                     }
                 }
                 ImGui::EndTabItem();
@@ -1040,13 +1079,13 @@
             SaveAllSettings();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Adicionar/Gerenciar NPCs Específicos")) {
+        if (ImGui::Button("Add/Manage NPCs")) {
             _isNpcSelectionModalOpen = true;
         }
         ImGui::Separator();
 
         _npcSelectorList.clear();
-        _npcSelectorList.push_back("NPCs (Geral)");
+        _npcSelectorList.push_back("NPCs (General)");
         static std::vector<std::string> npcSelectorLabels;
         npcSelectorLabels.clear();
 
@@ -1074,7 +1113,7 @@
             }
         }
 
-        if (ImGui::Combo("Configurar Para", &currentSelection, _npcSelectorList.data(), _npcSelectorList.size())) {
+        if (ImGui::Combo(LOC("menu_npc"), &currentSelection, _npcSelectorList.data(), _npcSelectorList.size())) {
             if (currentSelection == 0) {
                 _currentlySelectedNpcFormID = 0;
             } else {
@@ -1100,17 +1139,25 @@
         }
 
         if (ImGui::BeginTabBar("WeaponTypeTabs_NPC")) {
-            if (ImGui::BeginTabItem("Single Wield")) {
+            if (ImGui::BeginTabItem(LOC("tab_single_wield"))) {
                 for (auto& pair : *categoriesToDraw) {
-                    if (!pair.second.isDualWield) {
+                    if (!pair.second.isDualWield && !pair.second.isShieldCategory) {
                         DrawNPCCategoryUI(pair.second);
                     }
                 }
                 ImGui::EndTabItem();
             }
-            if (ImGui::BeginTabItem("Dual Wield")) {
+            if (ImGui::BeginTabItem(LOC("tab_dual_wield"))) {
                 for (auto& pair : *categoriesToDraw) {
                     if (pair.second.isDualWield) {
+                        DrawNPCCategoryUI(pair.second);
+                    }
+                }
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem(LOC("tab_shield"))) {
+                for (auto& pair : *categoriesToDraw) {
+                    if (pair.second.isShieldCategory) {
                         DrawNPCCategoryUI(pair.second);
                     }
                 }
@@ -1170,7 +1217,7 @@
                 // --- PONTO 1: Adicionando Drag and Drop para os Movesets de NPC ---
                 if (ImGui::BeginDragDropSource()) {
                     ImGui::SetDragDropPayload("DND_MOD_INSTANCE_NPC", &mod_i, sizeof(size_t));
-                    ImGui::Text("Mover moveset %s", sourceMod.name.c_str());
+                    ImGui::Text("Move moveset %s", sourceMod.name.c_str());
                     ImGui::EndDragDropSource();
                 }
                 if (ImGui::BeginDragDropTarget()) {
@@ -1215,7 +1262,7 @@
                         }
 
                         if (subInstance.sourceModIndex != modInstance.sourceModIndex) {
-                            label += std::format(" (de: {})", originMod.name);
+                            label += std::format(" (from: {})", originMod.name);
                         }
                         ImGui::Selectable(label.c_str(), false);
                         // --- FIM DA EXIBIÇÃO DA ORDEM ---
@@ -1615,9 +1662,17 @@ void AnimationManager::SaveAllSettings() {
                     // A verificação de keywords da mão esquerda já é feita acima.
                 }
 
-
+                // ADIÇÃO: Correção de segurança para a instância do jogador
+                int final_instance_index = config.instance_index;
+                // Se a configuração é para o jogador (!isNPC) e o índice for inválido (< 1), corrige para 1.
+                if (!config.isNPC && final_instance_index < 1) {
+                    SKSE::log::warn(
+                        "Índice de instância inválido (0) encontrado para o Jogador em {}. Corrigindo para 1.",
+                        jsonPath.string());
+                    final_instance_index = 1;  // Garante que o valor mínimo para o jogador seja 1
+                }
                 // Stance and Playlist order
-                AddCompareValuesCondition(andConditions, "cycle_instance", config.instance_index, allocator);
+                AddCompareValuesCondition(andConditions, "cycle_instance", final_instance_index, allocator);
                 if (config.order_in_playlist > 0) {
                     AddCompareValuesCondition(andConditions, "testarone", config.order_in_playlist, allocator);
                     if (config.isParent) {
@@ -1784,42 +1839,30 @@ void AnimationManager::SaveAllSettings() {
         return std::nullopt;
     }
 
-    void AnimationManager::UpdateMaxMovesetCache() {
+void AnimationManager::UpdateMaxMovesetCache() {
         SKSE::log::info("Atualizando cache de contagem máxima de movesets...");
         _maxMovesetsPerCategory.clear();
+        _maxMovesetsPerCategory_NPC.clear();
 
+        // 1. Cache do JOGADOR (lógica inalterada)
         for (auto& pair : _categories) {
             WeaponCategory& category = pair.second;
             std::array<int, 4> counts = {0, 0, 0, 0};
-
-            for (int i = 0; i < 4; ++i) {  // Loop através das 4 stances (0 a 3)
+            for (int i = 0; i < 4; ++i) {
                 CategoryInstance& instance = category.instances[i];
                 int parentMovesetCount = 0;
-
-                // A lógica agora precisa ir mais fundo, para dentro dos sub-movesets.
                 for (auto& modInst : instance.modInstances) {
-                    // Pula o pacote de moveset inteiro se ele estiver desmarcado.
                     if (!modInst.isSelected) continue;
-
-                    // Agora, iteramos através de cada sub-animação dentro do pacote.
                     for (auto& subInst : modInst.subAnimationInstances) {
-                        // Pula a sub-animação se ela estiver desmarcada.
                         if (!subInst.isSelected) continue;
-                        // --- INÍCIO DA NOVA VERIFICAÇÃO ---
-                        // Pega a definição original da sub-animação para verificar a flag
                         const auto& sourceSubAnim =
                             _allMods[subInst.sourceModIndex].subAnimations[subInst.sourceSubAnimIndex];
                         if (!sourceSubAnim.hasAnimations) {
-                            continue;  // PULA este sub-moveset se ele não tiver animações .hkx
+                            continue;
                         }
-                        // --- FIM DA NOVA VERIFICAÇÃO ---
-                        // A condição que define um "Pai" é a ausência de qualquer condição direcional.
-                        // Esta lógica DEVE ser idêntica à usada na função SaveAllSettings para garantir consistência.
                         bool isParent = !(subInst.pFront || subInst.pBack || subInst.pLeft || subInst.pRight ||
                                           subInst.pFrontRight || subInst.pFrontLeft || subInst.pBackRight ||
                                           subInst.pBackLeft || subInst.pRandom || subInst.pDodge);
-
-                        // Se for um "Pai", nós o contamos para o total da playlist.
                         if (isParent) {
                             parentMovesetCount++;
                         }
@@ -1827,38 +1870,54 @@ void AnimationManager::SaveAllSettings() {
                 }
                 counts[i] = parentMovesetCount;
             }
-
             _maxMovesetsPerCategory[category.name] = counts;
-            SKSE::log::info("Categoria '{}' tem contagens: [Stance 1: {}], [Stance 2: {}], [Stance 3: {}], [Stance 4: {}]",
-                            category.name, counts[0], counts[1], counts[2], counts[3]);
         }
-        // --- NOVO: Cache dos NPCs ---
-        _maxMovesetsPerCategory_NPC.clear();
+        SKSE::log::info("Cache do Jogador atualizado.");
+
+        // 2. Cache dos NPCS GERAIS (usando FormID 0 como chave)
         for (auto& pair : _npcCategories) {
             WeaponCategory& category = pair.second;
-
-            // NPCs usam apenas a stance/instance 0
-            CategoryInstance& instance = category.instances[0];
+            CategoryInstance& instance = category.instances[0];  // Stance 0 para NPCs
             int npcMovesetCount = 0;
-
             for (auto& modInst : instance.modInstances) {
                 if (modInst.isSelected) {
                     for (auto& subInst : modInst.subAnimationInstances) {
                         if (subInst.isSelected) {
-                            // Para NPCs, cada sub-moveset selecionado conta como 1
                             npcMovesetCount++;
                         }
                     }
                 }
             }
-
-            // Armazena a contagem na posição 0 do array (correspondente à stanceIndex 0)
             std::array<int, 4> npc_counts = {npcMovesetCount, 0, 0, 0};
-            _maxMovesetsPerCategory_NPC[category.name] = npc_counts;
-            SKSE::log::info("Categoria '{}' (NPC) tem contagem: {}", category.name, npcMovesetCount);
+            _maxMovesetsPerCategory_NPC[0][category.name] = npc_counts;
+        }
+        SKSE::log::info("Cache de NPCs Gerais (ID 0) atualizado.");
+
+        // 3. Cache dos NPCS ESPECÍFICOS (usando seu FormID real como chave)
+        for (const auto& npcConfigPair : _specificNpcConfigs) {
+            RE::FormID npcFormID = npcConfigPair.first;
+            const SpecificNpcConfig& npcConfig = npcConfigPair.second;
+
+            for (const auto& catPair : npcConfig.categories) {
+                const WeaponCategory& category = catPair.second;
+                const CategoryInstance& instance = category.instances[0];
+                int npcMovesetCount = 0;
+                for (const auto& modInst : instance.modInstances) {
+                    if (modInst.isSelected) {
+                        for (const auto& subInst : modInst.subAnimationInstances) {
+                            if (subInst.isSelected) {
+                                npcMovesetCount++;
+                            }
+                        }
+                    }
+                }
+                std::array<int, 4> npc_counts = {npcMovesetCount, 0, 0, 0};
+                _maxMovesetsPerCategory_NPC[npcFormID][category.name] = npc_counts;
+            }
+            SKSE::log::info("Cache para NPC Específico {:08X} atualizado.", npcFormID);
         }
 
-        SKSE::log::info("Cache de contagem máxima de movesets (Player & NPC) foi atualizado.");
+        SKSE::log::info("Cache de contagem máxima de movesets (Player & Todos NPCs) foi atualizado.");
     }
 
 
@@ -2726,8 +2785,10 @@ void AnimationManager::SaveAllSettings() {
             return;
         }
 
+        // NOVA ESTRUTURA PARA AGRUPAR DADOS DE SALVAMENTO
         struct SubmovesetSaveData {
-            const CreatorSubAnimationInstance* instance;
+            // Armazena todas as instâncias que compartilham o mesmo nome editado
+            std::vector<const CreatorSubAnimationInstance*> instances;
             std::vector<FileSaveConfig> configs;
         };
         std::map<std::string, SubmovesetSaveData> uniqueSubmovesets;
@@ -2770,7 +2831,8 @@ void AnimationManager::SaveAllSettings() {
                     config.pDodge = subInst.pDodge;
 
                     uniqueSubmovesets[subName].configs.push_back(config);
-                    uniqueSubmovesets[subName].instance = &subInst;
+                    // EM VEZ DE SOBRESCREVER, ADICIONA À LISTA
+                    uniqueSubmovesets[subName].instances.push_back(&subInst);
                 }
             }
         }
@@ -2788,23 +2850,58 @@ void AnimationManager::SaveAllSettings() {
 
             UpdateOrCreateJson(subMovesetPath / "config.json", data.configs);
 
+            // LÓGICA ATUALIZADA PARA O CYCLEDAR.JSON
             {
                 rapidjson::Document cycleDoc;
                 cycleDoc.SetObject();
                 auto& allocator = cycleDoc.GetAllocator();
-                std::string originalPathStr;
-                if (data.instance->sourceDef->path.filename() == "config.json") {
-                    originalPathStr = data.instance->sourceDef->path.parent_path().string();
-                } else {
-                    originalPathStr = data.instance->sourceDef->path.string();
+
+                // CRIA O ARRAY DE FONTES
+                rapidjson::Value sourcesArray(rapidjson::kArrayType);
+                bool anyBfco = false;
+
+                // Itera sobre todas as instâncias agrupadas sob este nome
+                for (const auto* instancePtr : data.instances) {
+                    if (!instancePtr || !instancePtr->sourceDef) continue;
+
+                    rapidjson::Value sourceObj(rapidjson::kObjectType);
+
+                    // Pega o caminho original da pasta
+                    std::string originalPathStr;
+                    if (instancePtr->sourceDef->path.filename() == "config.json") {
+                        originalPathStr = instancePtr->sourceDef->path.parent_path().string();
+                    } else {
+                        originalPathStr = instancePtr->sourceDef->path.string();
+                    }
+                    size_t pos = originalPathStr.find("Data\\");
+                    if (pos != std::string::npos) {
+                        originalPathStr = originalPathStr.substr(pos + 5);
+                    }
+                    sourceObj.AddMember("path", rapidjson::Value(originalPathStr.c_str(), allocator), allocator);
+
+                    // Adiciona a lista "filesToCopy" se houver alguma seleção
+                    int selectedCount = 0;
+                    rapidjson::Value filesArray(rapidjson::kArrayType);
+                    for (const auto& [filename, isSelected] : instancePtr->hkxFileSelection) {
+                        if (isSelected) {
+                            filesArray.PushBack(rapidjson::Value(filename.c_str(), allocator), allocator);
+                            selectedCount++;
+                        }
+                    }
+                    if (selectedCount < instancePtr->hkxFileSelection.size() && selectedCount > 0) {
+                        sourceObj.AddMember("filesToCopy", filesArray, allocator);
+                    }
+                    // Se nenhum arquivo for selecionado para esta fonte, pula ela.
+                    if (selectedCount == 0) continue;
+
+                    sourcesArray.PushBack(sourceObj, allocator);
+                    if (instancePtr->isBFCO) anyBfco = true;
                 }
-                size_t pos = originalPathStr.find("Data\\");
-                if (pos != std::string::npos) {
-                    originalPathStr = originalPathStr.substr(pos + 5);
-                }
-                cycleDoc.AddMember("pathDar", rapidjson::Value(originalPathStr.c_str(), allocator), allocator);
+
+                cycleDoc.AddMember("sources", sourcesArray, allocator);
                 cycleDoc.AddMember("conversionDone", false, allocator);
-                cycleDoc.AddMember("convertBFCO", data.instance->isBFCO, allocator);
+                cycleDoc.AddMember("convertBFCO", anyBfco, allocator);
+
                 std::ofstream outFile(subMovesetPath / "CycleDar.json");
                 rapidjson::StringBuffer buffer;
                 rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
@@ -2812,7 +2909,6 @@ void AnimationManager::SaveAllSettings() {
                 outFile << buffer.GetString();
             }
 
-            // --- INÍCIO DA ADIÇÃO #4: GERAR CYCLEMOVESET.JSON ---
             {
                 rapidjson::Document cycleMovesetDoc;
                 cycleMovesetDoc.SetArray();
@@ -2820,6 +2916,8 @@ void AnimationManager::SaveAllSettings() {
 
                 rapidjson::Value playerObj(rapidjson::kObjectType);
                 playerObj.AddMember("Name", "Player", allocator);
+                // O FormID para Player é o próprio nome, para consistência com a lógica de carregamento
+                playerObj.AddMember("FormID", "Player", allocator);
                 rapidjson::Value menuArray(rapidjson::kArrayType);
 
                 // Agrupa as configurações por categoria para este submoveset
@@ -2852,6 +2950,8 @@ void AnimationManager::SaveAllSettings() {
                             animObj.AddMember("sourceModName", rapidjson::Value(movesetName.c_str(), allocator),
                                               allocator);
                             animObj.AddMember("sourceSubName", rapidjson::Value(subName.c_str(), allocator), allocator);
+                            animObj.AddMember("sourceConfigPath",
+                                              rapidjson::Value(subMovesetPath.string().c_str(), allocator), allocator);
                             animObj.AddMember("pFront", configPtr->pFront, allocator);
                             animObj.AddMember("pBack", configPtr->pBack, allocator);
                             animObj.AddMember("pLeft", configPtr->pLeft, allocator);
@@ -2880,7 +2980,8 @@ void AnimationManager::SaveAllSettings() {
                 cycleMovesetDoc.Accept(writer);
                 outFile << buffer.GetString();
             }
-            // --- FIM DA ADIÇÃO #4 ---
+            // A lógica para gerar o CycleMoveset.json (se você a mantiver) permanece a mesma,
+            // pois ela já é baseada nas FileSaveConfig, que foram corretamente agrupadas.
         }
 
         _newMovesetCategorySelection.clear();
@@ -2985,7 +3086,7 @@ void AnimationManager::SaveAllSettings() {
 
     void AnimationManager::DrawAddDarModal() {
         if (_isAddDarModalOpen) {
-            ImGui::OpenPopup("Adicionar Animação DAR");
+            ImGui::OpenPopup("Add DAR animation");
             _isAddDarModalOpen = false;
         }
 
@@ -2994,11 +3095,11 @@ void AnimationManager::SaveAllSettings() {
         ImVec2 center = ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f, viewport->Pos.y + viewport->Size.y * 0.5f);
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-        if (ImGui::BeginPopupModal("Adicionar Animação DAR", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::Text("Biblioteca de Animações DAR");
+        if (ImGui::BeginPopupModal("Add DAR animation", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text("Library DAR");
             ImGui::Separator();
             static char darFilter[128] = "";
-            ImGui::InputText("Filtro", darFilter, sizeof(darFilter));
+            ImGui::InputText(LOC("filter"), darFilter, sizeof(darFilter));
             ImGui::Separator();
 
             if (ImGui::BeginChild("BibliotecaDAR", ImVec2(modal_list_size), true)) {
@@ -3012,13 +3113,14 @@ void AnimationManager::SaveAllSettings() {
 
                     if (filter_str.empty() || name_lower.find(filter_str) != std::string::npos) {
                         ImGui::PushID(static_cast<int>(i));
-                        if (ImGui::Button("Adicionar")) {
+                        if (ImGui::Button(LOC("add"))) {
                             if (_stanceToAddTo) {
                                 CreatorSubAnimationInstance newInstance;
                                 // O ponteiro agora aponta para um elemento no nosso vetor _darSubMovesets
                                 newInstance.sourceDef = &darSubDef;
                                 strcpy_s(newInstance.editedName.data(), newInstance.editedName.size(),
                                          darSubDef.name.c_str());
+                                PopulateHkxFiles(newInstance);
                                 _stanceToAddTo->subMovesets.push_back(newInstance);
                                 SKSE::log::info("Adicionando animação DAR '{}' à stance.", darSubDef.name);
                             }
@@ -3031,7 +3133,7 @@ void AnimationManager::SaveAllSettings() {
             }
             ImGui::EndChild();
             ImGui::Separator();
-            if (ImGui::Button("Fechar", ImVec2(120, 0))) {
+            if (ImGui::Button(LOC("close"), ImVec2(120, 0))) {
                 strcpy_s(darFilter, "");
                 ImGui::CloseCurrentPopup();
             }
@@ -3277,7 +3379,7 @@ void AnimationManager::SaveAllSettings() {
             std::vector<const char*> baseCategoryNames;
             std::vector<const WeaponCategory*> baseCategoryPtrs;
             for (const auto& pair : _categories) {
-                if (!pair.second.isCustom && !pair.second.isDualWield) {
+                if (!pair.second.isCustom && !pair.second.isDualWield && !pair.second.isShieldCategory) {
                     baseCategoryNames.push_back(pair.first.c_str());
                     baseCategoryPtrs.push_back(&pair.second);
                 }
@@ -3319,7 +3421,7 @@ void AnimationManager::SaveAllSettings() {
             ImGui::Separator();
 
             // --- Lógica de Salvamento (Unificada) ---
-            const char* saveButtonText = isEditing ? "Save Changes" : "Save";
+            const char* saveButtonText = LOC("save");
             if (ImGui::Button(saveButtonText, ImVec2(120, 0))) {
                 std::string newName = _newCategoryNameBuffer;
                 std::string originalName = isEditing ? _categoryToEditPtr->name : "";
@@ -3373,7 +3475,7 @@ void AnimationManager::SaveAllSettings() {
                 }
             }
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            if (ImGui::Button(LOC("close"), ImVec2(120, 0))) {
                 _categoryToEditPtr = nullptr;  // Reseta o ponteiro de edição
                 ImGui::CloseCurrentPopup();
             }
@@ -3584,7 +3686,7 @@ void AnimationManager::SaveAllSettings() {
             }
         }
 
-        _pluginList.push_back("Todos");
+        _pluginList.push_back(LOC("all"));
         for (const auto& pluginName : uniquePlugins) {
             _pluginList.push_back(pluginName);
         }
@@ -3595,10 +3697,10 @@ void AnimationManager::SaveAllSettings() {
     }
 
     
-// INÍCIO DA SUBSTITUIÇÃO (Função DrawNpcSelectionModal)
+
     void AnimationManager::DrawNpcSelectionModal() {
         if (_isNpcSelectionModalOpen) {
-            ImGui::OpenPopup("Selecionar NPC Específico");
+            ImGui::OpenPopup(LOC("select_npc"));
         }
 
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -3606,12 +3708,12 @@ void AnimationManager::SaveAllSettings() {
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * 0.7f, viewport->Size.y * 0.7f));
 
-        if (ImGui::BeginPopupModal("Selecionar NPC Específico", &_isNpcSelectionModalOpen, ImGuiWindowFlags_None)) {
+        if (ImGui::BeginPopupModal(LOC("select_npc"), &_isNpcSelectionModalOpen, ImGuiWindowFlags_None)) {
             if (!_npcListPopulated) {
                 PopulateNpcList();
             }
 
-            ImGui::InputText("Filtrar por Nome/EditorID/FormID", _npcFilterBuffer, sizeof(_npcFilterBuffer));
+            ImGui::InputText(LOC("filter"), _npcFilterBuffer, sizeof(_npcFilterBuffer));
             ImGui::SameLine();
             std::vector<const char*> pluginNamesCStr;
             for (const auto& name : _pluginList) {
@@ -3624,10 +3726,10 @@ void AnimationManager::SaveAllSettings() {
 
             if (ImGui::BeginTable("NpcListTable", 4,
                                   ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
-                ImGui::TableSetupColumn("Nome", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableSetupColumn("EditorID", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableSetupColumn("FormID", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-                ImGui::TableSetupColumn("Configurar", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableSetupColumn(LOC("enable_disable"), ImGuiTableColumnFlags_WidthFixed, 200.0f);
                 ImGui::TableHeadersRow();
 
                 std::string filterText = _npcFilterBuffer;
@@ -3691,11 +3793,36 @@ void AnimationManager::SaveAllSettings() {
                 ImGui::EndTable();
             }
 
-            ImGui::Separator();
+            /*ImGui::Separator();
             if (ImGui::Button("Fechar", ImVec2(120, 0))) {
                 _isNpcSelectionModalOpen = false;
-            }
+            }*/
             ImGui::EndPopup();
         }
     }
-    // FIM DA SUBSTITUIÇÃO
+
+    void AnimationManager::PopulateHkxFiles(CreatorSubAnimationInstance& instance) {
+        if (!instance.sourceDef) return;
+
+        // Garante que o caminho é um diretório
+        std::filesystem::path sourceDirectory = instance.sourceDef->path;
+        if (std::filesystem::is_regular_file(sourceDirectory)) {
+            sourceDirectory = sourceDirectory.parent_path();
+        }
+
+        if (!std::filesystem::exists(sourceDirectory) || !std::filesystem::is_directory(sourceDirectory)) {
+            return;
+        }
+
+        instance.hkxFileSelection.clear();
+        for (const auto& fileEntry : std::filesystem::directory_iterator(sourceDirectory)) {
+            if (fileEntry.is_regular_file()) {
+                std::string extension = fileEntry.path().extension().string();
+                std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+                if (extension == ".hkx") {
+                    // Adiciona o arquivo à lista, selecionado por padrão
+                    instance.hkxFileSelection[fileEntry.path().filename().string()] = true;
+                }
+            }
+        }
+    }

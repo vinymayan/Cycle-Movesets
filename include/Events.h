@@ -16,7 +16,7 @@ public:
     void DrawUserMovesetCreator();
     void DrawNPCMenu();
     static int GetMaxMovesetsFor(const std::string& category, int stanceIndex);
-    static int GetMaxMovesetsForNPC(const std::string& category, int stanceIndex);
+    static int GetMaxMovesetsForNPC(RE::FormID npcFormID, const std::string& category, int stanceIndex);
     const std::map<std::string, WeaponCategory>& GetCategories() const;
     std::string GetStanceName(const std::string& categoryName, int stanceIndex);
 
@@ -148,7 +148,7 @@ private:
      // NOVO CACHE ESTÁTICO: Armazena a contagem de movesets para acesso rápido.
     // A chave é o nome da categoria (ex: "Swords"), o valor é um array de 4 ints (um para cada stance).
     inline static std::map<std::string, std::array<int, 4>> _maxMovesetsPerCategory;
-    inline static std::map<std::string, std::array<int, 4>> _maxMovesetsPerCategory_NPC;
+    inline static std::map<RE::FormID, std::map<std::string, std::array<int, 4>>> _maxMovesetsPerCategory_NPC;
 
     // NOVA FUNÇÃO PRIVADA: Usada internamente para preencher o cache.
     void UpdateMaxMovesetCache();
@@ -175,6 +175,7 @@ private:
         bool pFront = false, pBack = false, pLeft = false, pRight = false;
         bool pFrontRight = false, pFrontLeft = false, pBackRight = false, pBackLeft = false;
         bool pRandom = false, pDodge = false;
+        std::map<std::string, bool> hkxFileSelection;
     };
 
 
@@ -243,6 +244,8 @@ private:
     // --- Novas Funções Privadas ---
     void PopulateNpcList();
     void DrawNpcSelectionModal();
+
+    void PopulateHkxFiles(CreatorSubAnimationInstance& instance);
 
     RE::FormID _currentlySelectedNpcFormID = 0;
     std::vector<const char*> _npcSelectorList;

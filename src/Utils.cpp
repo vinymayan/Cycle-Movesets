@@ -142,20 +142,20 @@ void InputListener::UpdateDirectionalState() {
 
     // Opcional: só imprime no log se o valor mudar, para não poluir o log.
     if (VariavelAnterior != directionalState ) {
-        SKSE::log::info("DirecionalCycleMoveset  alterado para: {}", directionalState );
+        //SKSE::log::info("DirecionalCycleMoveset  alterado para: {}", directionalState );
         GlobalControl::UpdateSkyPromptTexts();
         // Aqui você enviaria o valor para sua animação, por exemplo:
         // RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("MinhaVariavelDirecional",
         // directionalState );
         if (GlobalControl::g_isWeaponDrawn && !GlobalControl::MovesetChangesOpen && !GlobalControl::StanceChangesOpen) {
             SkyPromptAPI::SendPrompt(GlobalControl::MovesetSink::GetSingleton(), GlobalControl::g_clientID);
-            SKSE::log::info("SkyPrompt reenviado devido à mudança de direção.");
+            //SKSE::log::info("SkyPrompt reenviado devido à mudança de direção.");
             
         }
         if (GlobalControl::g_isWeaponDrawn && GlobalControl::MovesetChangesOpen && !GlobalControl::StanceChangesOpen) {
             SkyPromptAPI::SendPrompt(GlobalControl::MovesetChangesSink::GetSingleton(), GlobalControl::g_clientID);
             
-            SKSE::log::info("SkyPrompt reenviado devido à mudança de direção e menu aberto.");
+            //SKSE::log::info("SkyPrompt reenviado devido à mudança de direção e menu aberto.");
         }
     }
     RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("DirecionalCycleMoveset", directionalState);
@@ -179,7 +179,7 @@ std::string GetActorWeaponCategoryName(RE::Actor* targetActor) {
             leftHandType = static_cast<double>(leftWeapon->GetWeaponType());
         } else if (auto leftShield = leftHand->As<RE::TESObjectARMO>()) {
             if (leftShield->IsShield()) {
-                leftHandType = 9.0;  // Usando 9.0 como o tipo para escudos
+                leftHandType = 11.0;  // Usando 11.0 como o tipo para escudos
             }
         }
     }
@@ -292,10 +292,11 @@ void GlobalControl::StancesSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
             }
             break;        
         case SkyPromptAPI::kDeclined:
-            StanceText = "Stance Menu";
-            MovesetText = "Moveset Menu";
             g_currentMoveset = 0;
             g_currentStance = 0;
+            UpdateSkyPromptTexts();
+            //StanceText = "Stances";
+            //MovesetText = "Movesets";
             SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
             SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
             RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", g_currentMoveset);
@@ -384,6 +385,7 @@ void GlobalControl::MovesetSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
                 if (!SkyPromptAPI::SendPrompt(MovesetChangesSink::GetSingleton(), GlobalControl::g_clientID)) {
                     logger::error("Skyprompt didnt worked Stances Changes Sink");
                 }
+                SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
                 break;
             }
         case SkyPromptAPI::kUp:
@@ -630,12 +632,12 @@ RE::BSEventNotifyControl GlobalControl::AnimationEventHandler::ProcessEvent(
 
      // --- LOG DE DIAGNÓSTICO ---
     // Apenas loga se o timer deveria estar rodando, para não poluir o log 100% do tempo
-    /*if (g_comboState.isTimerRunning) {
+    if (g_comboState.isTimerRunning) {
         auto now = std::chrono::steady_clock::now();
         auto time_left_ms = std::chrono::duration_cast<std::chrono::milliseconds>(g_comboState.comboTimeoutTimestamp - now).count();
         SKSE::log::info("[UpdateHandler] Checando timer... g_comboState.isTimerRunning: {}. Tempo restante: {} ms", g_comboState.isTimerRunning,
                         time_left_ms);
-    }*/
+    }
     
 
     if (a_event && a_event->holder && a_event->holder->IsPlayerRef()) {
@@ -650,11 +652,10 @@ RE::BSEventNotifyControl GlobalControl::AnimationEventHandler::ProcessEvent(
                 SKSE::GetTaskInterface()->AddTask([]() { TriggerSmartRandomNumber("Fim de Combo (C++)"); });
             }
         }
-        if (eventName == "weaponSwing" || eventName == "weaponLeftSwing" ||
+        else if(eventName == "weaponSwing" || eventName == "weaponLeftSwing" ||
             eventName == "h2hAttack" || eventName == "PowerAttack_Start_end") {
-            SKSE::log::info("[AnimationEventHandler] Evento '{}' detectado. Timer INICIADO. g_comboState.isTimerRunning AGORA É: {}",
-                            eventName, g_comboState.isTimerRunning);
-            SKSE::log::info("[AnimationEventHandler] Evento '{}' detectado. Timer INICIADO.", eventName);
+            SKSE::log::info("[AnimationEventHandler] Evento '{}' detectado. Timer INICIADO. g_comboState.isTimerRunning AGORA É: {}",eventName, g_comboState.isTimerRunning);
+            //SKSE::log::info("[AnimationEventHandler] Evento '{}' detectado. Timer INICIADO.", eventName);
             // Apenas definimos o estado e o momento em que o combo deve terminar.
             g_comboState.isTimerRunning = true;
             auto timeout_ms = std::chrono::milliseconds(static_cast<int>(Settings::CycleTimer * 1000));
@@ -730,7 +731,7 @@ RE::BSEventNotifyControl GlobalControl::NpcCycleSink::ProcessEvent(const RE::BSA
             SKSE::log::info("[UpdateHandler] Combo do ator {:08X} expirou.", formID);
             // Adicionamos a lógica para chamar a função para o ator específico
             // Usando SKSE::GetTaskInterface() ainda é uma boa prática
-            SKSE::GetTaskInterface()->AddTask([actor]() { NPCrandomNumber(actor, "Fim de Combo (C++)"); });
+            SKSE::GetTaskInterface()->AddTask([actor]() { NPCrandomNumber(actor, "Fim de Combo"); });
         }
     }
     return RE::BSEventNotifyControl::kContinue;
@@ -742,7 +743,8 @@ void GlobalControl::NPCrandomNumber(RE::Actor* targetActor, const std::string& e
     }
     std::string category = GetActorWeaponCategoryName(targetActor);
     int stanceIndex = 0;
-    int maxMovesets = AnimationManager::GetSingleton()->GetMaxMovesetsForNPC(category, stanceIndex);
+    int maxMovesets = AnimationManager::GetSingleton()->GetMaxMovesetsForNPC(targetActor->GetActorBase()->GetFormID(),
+                                                                             category, stanceIndex);
 
     // LOG ADICIONAL PARA DEBUG
     SKSE::log::info("NPCrandomNumber para o ator {:08X} (Categoria: '{}') encontrou maxMovesets = {}",
@@ -786,8 +788,7 @@ void GlobalControl::NPCrandomNumber(RE::Actor* targetActor, const std::string& e
         state.previousMoveset = state.lastMoveset;
         state.lastMoveset = randomNumber;
 
-        SKSE::log::info("{} (Ator {:08X}, {} movesets): Número gerado: {}", eventSource, formID, maxMovesets,
-                        randomNumber);
+        SKSE::log::info("{} (Ator {:08X}, {} movesets): Número gerado: {}", eventSource, formID, maxMovesets,randomNumber);
     }
     
 }
@@ -804,7 +805,7 @@ RE::BSEventNotifyControl GlobalControl::NpcCombatTracker::ProcessEvent(const RE:
         return RE::BSEventNotifyControl::kContinue;
     }
     if (actor && actor->IsPlayerRef()) {
-        // Ignorar eventos do jogador, se desejar
+        // Ignorar eventos do jogador
         return RE::BSEventNotifyControl::kContinue;
     }
 
@@ -854,48 +855,80 @@ void GlobalControl::NpcCombatTracker::UnregisterSink(RE::Actor* a_actor) {
     }
 }
 
+void GlobalControl::NpcCombatTracker::RegisterSinksForExistingCombatants() {
+    SKSE::log::info("[NpcCombatTracker] Verificando NPCs já em combate após carregar o jogo...");
+
+    auto* processLists = RE::ProcessLists::GetSingleton();
+    if (!processLists) {
+        SKSE::log::warn("[NpcCombatTracker] Não foi possível obter ProcessLists.");
+        return;
+    }
+
+    // Itera sobre todos os atores que estão "ativos" no jogo
+    for (auto& actorHandle : processLists->highActorHandles) {
+        if (auto actor = actorHandle.get().get()) {
+            // A função IsInCombat() nos diz se o ator já está em um estado de combate
+            if (!actor->IsPlayerRef() && actor->IsInCombat()) {
+                SKSE::log::info("[NpcCombatTracker] Ator '{}' ({:08X}) já está em combate. Registrando sink...",
+                                actor->GetName(), actor->GetFormID());
+                // Usamos a mesma função de registro que já existe!
+                RegisterSink(actor);
+            }
+        }
+    }
+    SKSE::log::info("[NpcCombatTracker] Verificação concluída.");
+}
+
 void GlobalControl::UpdateSkyPromptTexts() {
     auto animManager = AnimationManager::GetSingleton();
     std::string category = GetCurrentWeaponCategoryName();
 
-    // --- LÓGICA PARA STANCES (seu código atual está ótimo aqui) ---
-    int currentStanceIndex = g_currentStance - 1;  // 0-3
-    if (currentStanceIndex >= 0 && currentStanceIndex < 4) {
+    // --- LÓGICA PARA STANCES  ---
+    if (g_currentStance == 0) {
+        // Caso especial: Nenhuma stance ativa.
+        StanceText = "Stances";  // Define um texto padrão.
+        // 'Next' aponta para a primeira stance (índice 0).
+        StanceNextText = animManager->GetStanceName(category, 0);
+        // 'Back' aponta para a última stance (índice 3).
+        StanceBackText = animManager->GetStanceName(category, 3);
+    } else {
+        // Lógica original para quando uma stance está ativa (1 a 4).
+        int currentStanceIndex = g_currentStance - 1;  // Converte para índice 0-3
         int nextStanceIndex = (currentStanceIndex + 1) % 4;
         int backStanceIndex = (currentStanceIndex - 1 + 4) % 4;
         StanceText = animManager->GetStanceName(category, currentStanceIndex);
         StanceNextText = animManager->GetStanceName(category, nextStanceIndex);
         StanceBackText = animManager->GetStanceName(category, backStanceIndex);
     }
+    int validStanceIndexForMoveset = g_currentStance - 1;
 
-    // --- LÓGICA PARA MOVESETS (seu código atual está ótimo aqui) ---
-    int maxMovesets = animManager->GetMaxMovesetsFor(category, currentStanceIndex);
+    // --- LÓGICA PARA MOVESETS  ---
+    int maxMovesets = animManager->GetMaxMovesetsFor(category, validStanceIndexForMoveset);
     int currentMovesetIndex = g_currentMoveset;  // 1-N
     if (maxMovesets > 0) {
         int dirState = InputListener::GetDirectionalState();
         SKSE::log::info("[UpdateSkyPromptTexts] Chamando GetCurrentMovesetName com dirState: {}", dirState);
         std::string currentMovesetName =
-            animManager->GetCurrentMovesetName(category, currentStanceIndex, currentMovesetIndex, dirState);
+            animManager->GetCurrentMovesetName(category, validStanceIndexForMoveset, currentMovesetIndex, dirState);
         MovesetText = std::format("{} ({}/{})", currentMovesetName, currentMovesetIndex, maxMovesets);
 
         if (maxMovesets > 1) {
             int nextMovesetIndex = (currentMovesetIndex % maxMovesets) + 1;
             int backMovesetIndex = (currentMovesetIndex - 2 + maxMovesets) % maxMovesets + 1;
-            MovesetNextText = animManager->GetCurrentMovesetName(category, currentStanceIndex, nextMovesetIndex,0);
-            MovesetBackText = animManager->GetCurrentMovesetName(category, currentStanceIndex, backMovesetIndex,0);
+            MovesetNextText =
+                animManager->GetCurrentMovesetName(category, validStanceIndexForMoveset, nextMovesetIndex, 0);
+            MovesetBackText =
+                animManager->GetCurrentMovesetName(category, validStanceIndexForMoveset, backMovesetIndex, 0);
         } else {
-            MovesetNextText = "";
-            MovesetBackText = "";
+            MovesetNextText = "Back";
+            MovesetBackText = "Next";
         }
     } else {
-        MovesetText = "Nenhum Moveset";
-        MovesetNextText = "";
-        MovesetBackText = "";
+        MovesetText = "Movesets";
+        MovesetNextText = "Back";
+        MovesetBackText = "Next";
     }
 
-    // ================== INÍCIO DA MUDANÇA ESSENCIAL ==================
-
-    // 1. Recrie os objetos Prompt globais com os textos atualizados
     stance_actual = SkyPromptAPI::Prompt(StanceText, 0, 0, SkyPromptAPI::PromptType::kSinglePress, Settings::ShowMenu ? 20 : 0,
                                          Stances_menu,
                                          0xFFFFFFFF, 0.999f);
@@ -915,11 +948,8 @@ void GlobalControl::UpdateSkyPromptTexts() {
     moveset_back = SkyPromptAPI::Prompt(MovesetBackText, 2, 0, SkyPromptAPI::PromptType::kSinglePress,
                                         Settings::ShowMenu ? 20 : 0, Back_key);
 
-    // 2. Chame a função de update para cada sink
     StancesSink::GetSingleton()->UpdatePrompts();
     StancesChangesSink::GetSingleton()->UpdatePrompts();
     MovesetSink::GetSingleton()->UpdatePrompts();
     MovesetChangesSink::GetSingleton()->UpdatePrompts();
-
-    // =================== FIM DA MUDANÇA ESSENCIAL ===================
 }

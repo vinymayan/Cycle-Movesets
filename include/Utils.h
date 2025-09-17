@@ -28,8 +28,8 @@ namespace GlobalControl {
     inline bool StanceChangesOpen = false;
     
   
-    inline std::string StanceText = "Stance Menu";
-    inline std::string MovesetText = "Moveset Menu";
+    inline std::string StanceText = "Stances";
+    inline std::string MovesetText = "Movesets";
     inline std::string StanceNextText = "Next";
     inline std::string StanceBackText = "Back";
     inline std::string MovesetNextText = "Next";
@@ -255,6 +255,8 @@ namespace GlobalControl {
 
         static void RegisterSink(RE::Actor* a_actor);
         static void UnregisterSink(RE::Actor* a_actor);
+
+        static void RegisterSinksForExistingCombatants();
 
     private:
         // Instância compartilhada do nosso processador de lógica

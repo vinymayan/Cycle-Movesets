@@ -101,11 +101,12 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
 
         SKSE::GetCameraEventSource()->AddEventSink(GlobalControl::CameraChange::GetSingleton());
 
-        
         if (auto* ui = RE::UI::GetSingleton(); ui) {
             logger::info("Adding event sink for dialogue menu auto zoom.");
             ui->AddEventSink<RE::MenuOpenCloseEvent>(GlobalControl::MenuOpen::GetSingleton());
         }
+
+        GlobalControl::NpcCombatTracker::RegisterSinksForExistingCombatants();
     }
 }
 
