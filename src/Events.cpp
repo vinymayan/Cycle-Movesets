@@ -68,14 +68,12 @@ namespace MyMenu {
                 }
 
                 
-                if (ImGui::Checkbox(
-                        "Show menu",
-                        &Settings::ShowMenu)) {  // Supondo que você adicionará a tradução LOC("option_random_cycle")
+                if (ImGui::Checkbox("Show Menu",&Settings::ShowMenu)) { 
                     settings_changed = true;
-                    if (!SkyPromptAPI::RequestTheme(GlobalControl::g_clientID,
-                                                   Settings::ShowMenu ? "Cycle Movesets" : "Cycle Movesets_hidden")) {
+                    if (!SkyPromptAPI::RequestTheme(GlobalControl::g_clientID,Settings::ShowMenu ? "Cycle Movesets" : "Cycle Movesets_hidden")) {
                         logger::error("Falha ao solicitar o tema");
                     }
+                    GlobalControl::UpdateSkyPromptTexts();
                 }
                 if (settings_changed) {
                     MyMenu::SaveSettings();

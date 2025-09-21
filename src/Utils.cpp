@@ -396,8 +396,10 @@ void GlobalControl::MovesetSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
             SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
             break;
         case SkyPromptAPI::kDeclined:
-            RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", 0);
-            GlobalControl::MovesetText = "Moveset Menu";
+            g_currentMoveset = 0;
+            UpdateSkyPromptTexts();
+            RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", g_currentMoveset);
+            //GlobalControl::MovesetText = "Moveset";
             SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
             break;
     }

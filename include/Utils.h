@@ -108,7 +108,7 @@ namespace GlobalControl {
         
     };
 
-        class StancesChangesSink final : public SkyPromptAPI::PromptSink,
+    class StancesChangesSink final : public SkyPromptAPI::PromptSink,
                                      public clib_util::singleton::ISingleton<StancesChangesSink> {
 
     public:

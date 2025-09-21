@@ -25,7 +25,7 @@ namespace Settings {
     inline int hotkey_quarta_g = 264; // Controle (LB)
 
     inline bool CycleMoveset = true;
-    inline float CycleTimer = 1.4f;
+    inline float CycleTimer = 1.2f;
     inline bool RandomCycle = false;
     inline bool ShowMenu = true;
     inline std::string SelectedLanguage = "English";

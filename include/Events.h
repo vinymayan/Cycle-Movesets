@@ -257,6 +257,7 @@ struct FileSaveConfig {
     const WeaponCategory* category;
     // Campos adicionados para carregar o estado das checkboxes
     bool isParent = false;
+    std::set<int> childDirections;
     bool isNPC = false;
     RE::FormID npcFormID = 0;
     std::string pluginName;

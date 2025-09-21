@@ -82,8 +82,13 @@
                 // Modo: Copia todos os .hkx (comportamento padrão)
                 SKSE::log::info("Modo: Copiando todos os arquivos .hkx da pasta.");
                 for (const auto& fileEntry : std::filesystem::directory_iterator(sourcePath)) {
-                    if (fileEntry.is_regular_file() && fileEntry.path().extension() == ".hkx") {
-                        CopySingleFile(fileEntry.path(), destinationPath, filesCopied);
+                    if (fileEntry.is_regular_file()) {
+                        std::string extension = fileEntry.path().extension().string();
+                        std::transform(extension.begin(), extension.end(), extension.begin(),
+                                       [](unsigned char c) { return std::tolower(c); });
+                        if (extension == ".hkx") {
+                            CopySingleFile(fileEntry.path(), destinationPath, filesCopied);
+                        }
                     }
                 }
             }
@@ -367,9 +372,9 @@
     void AnimationManager::DrawAddModModal() {
         if (_isAddModModalOpen) {
             if (_instanceToAddTo) {
-                ImGui::OpenPopup(LOC("add_moveset"));
-            } else if (_modInstanceToAddTo || _userMovesetToAddTo || _stanceToAddTo) {
                 ImGui::OpenPopup(LOC("add_animation"));
+            } else if (_modInstanceToAddTo || _userMovesetToAddTo || _stanceToAddTo) {
+                ImGui::OpenPopup(LOC("add_moveset"));
             }
             _isAddModModalOpen = false;
         }
@@ -378,8 +383,8 @@
         ImVec2 center = ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f, viewport->Pos.y + viewport->Size.y * 0.5f);
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-        // Modal LOC("add_moveset") (sem alterações, já estava correto)
-        if (ImGui::BeginPopupModal(LOC("add_moveset"), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        // Modal LOC("add_animation") (sem alterações, já estava correto)
+        if (ImGui::BeginPopupModal(LOC("add_animation"), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text(LOC("library"));
             ImGui::Separator();
             ImGui::InputText(LOC("filter"), _movesetFilter, 128);
@@ -417,9 +422,9 @@
             ImGui::EndPopup();
         }
 
-        // Modal LOC("add_animation") (COM AS CORREÇÕES)
+        // Modal LOC("add_moveset") (COM AS CORREÇÕES)
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        if (ImGui::BeginPopupModal(LOC("add_animation"), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::BeginPopupModal(LOC("add_moveset"), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text(LOC("library"));
             ImGui::Separator();
             ImGui::InputText(LOC("filter"), _subMovesetFilter, 128);
@@ -432,77 +437,51 @@
                     const auto& modDef = _allMods[modIdx];
                     std::string mod_name_str = modDef.name;
                     std::transform(mod_name_str.begin(), mod_name_str.end(), mod_name_str.begin(), ::tolower);
-                    bool parent_matches = mod_name_str.find(filter_str) != std::string::npos;
-                    bool child_matches = false;
-                    if (!parent_matches) {
-                        for (const auto& subAnim : modDef.subAnimations) {
-                            std::string sub_name_str = subAnim.name;
-                            std::transform(sub_name_str.begin(), sub_name_str.end(), sub_name_str.begin(), ::tolower);
-                            if (sub_name_str.find(filter_str) != std::string::npos) {
-                                child_matches = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (filter_str.empty() || parent_matches || child_matches) {
+                    if (filter_str.empty() || mod_name_str.find(filter_str) != std::string::npos) {
+                        // Se o pai passar no filtro, mostra o TreeNode
                         if (ImGui::TreeNode(modDef.name.c_str())) {
+                            // Loop interno pelos submovesets (filhos)
                             for (size_t subAnimIdx = 0; subAnimIdx < modDef.subAnimations.size(); ++subAnimIdx) {
                                 const auto& subAnimDef = modDef.subAnimations[subAnimIdx];
-                                std::string sub_name_str = subAnimDef.name;
-                                std::transform(sub_name_str.begin(), sub_name_str.end(), sub_name_str.begin(), ::tolower);
 
-                                if (filter_str.empty() || sub_name_str.find(filter_str) != std::string::npos) {
-                                    ImGui::PushID(static_cast<int>(
-                                        modIdx * 1000 +
-                                        subAnimIdx));  // <-- CORREÇÃO: PushID antes de qualquer item da linha.
+                                // NENHUM FILTRO AQUI DENTRO. Mostra todos os filhos.
 
-                                
+                                ImGui::PushID(static_cast<int>(modIdx * 1000 + subAnimIdx));
 
-                                    // <-- CORREÇÃO 1: Alinha o botão à direita com um espaçamento.
-                                    float button_width = 200.0f;
+                                float button_width = 200.0f;
+                                ImVec2 content_avail;
+                                ImGui::GetContentRegionAvail(&content_avail);
 
-                                    ImVec2 content_avail;
-                                    ImGui::GetContentRegionAvail(&content_avail);  // Pega a região disponível
-
-                                    if (ImGui::Button(LOC("add"))) {
-                                        SubAnimationInstance newSubInstance;
-                                        newSubInstance.sourceModIndex = modIdx;
-                                        newSubInstance.sourceSubAnimIndex = subAnimIdx;
-                                        const auto& sourceMod = _allMods[modIdx];
-                                        const auto& sourceSubAnim = sourceMod.subAnimations[subAnimIdx];
-                                        newSubInstance.sourceModName = sourceMod.name;
-                                        newSubInstance.sourceSubName = sourceSubAnim.name;
-                                        if (_modInstanceToAddTo) {
-                                            _modInstanceToAddTo->subAnimationInstances.push_back(newSubInstance);
-                                        } else if (_userMovesetToAddTo) {
-                                            _userMovesetToAddTo->subAnimations.push_back(newSubInstance);
-                                        } else if (_stanceToAddTo) {
-                                            //const auto& subAnimDef = modDef.subAnimations[subAnimIdx];
-                                            // Cria uma instância completa da nova estrutura
-                                            CreatorSubAnimationInstance newInstance;
-                                            newInstance.sourceDef = &subAnimDef;
-                                            strcpy_s(newInstance.editedName.data(), newInstance.editedName.size(),
-                                                     subAnimDef.name.c_str());
-
-                                            // Adiciona a nova instância completa ao vetor
-                                            PopulateHkxFiles(newInstance);
-                                            _stanceToAddTo->subMovesets.push_back(newInstance);
-                                        }
-
+                                if (ImGui::Button(LOC("add"))) {
+                                    SubAnimationInstance newSubInstance;
+                                    newSubInstance.sourceModIndex = modIdx;
+                                    newSubInstance.sourceSubAnimIndex = subAnimIdx;
+                                    const auto& sourceMod = _allMods[modIdx];
+                                    const auto& sourceSubAnim = sourceMod.subAnimations[subAnimIdx];
+                                    newSubInstance.sourceModName = sourceMod.name;
+                                    newSubInstance.sourceSubName = sourceSubAnim.name;
+                                    if (_modInstanceToAddTo) {
+                                        _modInstanceToAddTo->subAnimationInstances.push_back(newSubInstance);
+                                    } else if (_userMovesetToAddTo) {
+                                        _userMovesetToAddTo->subAnimations.push_back(newSubInstance);
+                                    } else if (_stanceToAddTo) {
+                                        CreatorSubAnimationInstance newInstance;
+                                        newInstance.sourceDef = &subAnimDef;
+                                        strcpy_s(newInstance.editedName.data(), newInstance.editedName.size(),
+                                                 subAnimDef.name.c_str());
+                                        PopulateHkxFiles(newInstance);
+                                        _stanceToAddTo->subMovesets.push_back(newInstance);
                                     }
-                                    // Se a largura disponível for maior que o botão, alinha
-                                    if (content_avail.x > button_width) {
-                                        ImGui::SameLine(button_width +40);
-                                    } else {
-                                        ImGui::SameLine();  // Fallback para evitar posições negativas
-                                    }
-
-                                
-                                    ImGui::Text("%s", subAnimDef.name.c_str());
-                                    ImGui::PopID();  // <-- CORREÇÃO 2: PopID movido para DENTRO do loop
-                                                     
                                 }
+
+                                if (content_avail.x > button_width) {
+                                    ImGui::SameLine(button_width + 40);
+                                } else {
+                                    ImGui::SameLine();
+                                }
+
+                                ImGui::Text("%s", subAnimDef.name.c_str());
+                                ImGui::PopID();
                             }
                             ImGui::TreePop();
                         }
@@ -662,22 +641,22 @@
                                     ImGui::Indent();
                                     ImGui::Checkbox("F", &subInst.pFront);
                                     ImGui::SameLine();
-                                    ImGui::Checkbox("B", &subInst.pBack);
-                                    ImGui::SameLine();
-                                    ImGui::Checkbox("L", &subInst.pLeft);
-                                    ImGui::SameLine();
-                                    ImGui::Checkbox("R", &subInst.pRight);
-                                    ImGui::SameLine();
                                     ImGui::Checkbox("FR", &subInst.pFrontRight);
                                     ImGui::SameLine();
                                     ImGui::Checkbox("FL", &subInst.pFrontLeft);
+                                    ImGui::SameLine();
+                                    ImGui::Checkbox("R", &subInst.pRight);
+                                    ImGui::SameLine();
+                                    ImGui::Checkbox("L", &subInst.pLeft);
+                                    ImGui::SameLine();
+                                    ImGui::Checkbox("B", &subInst.pBack);
                                     ImGui::SameLine();
                                     ImGui::Checkbox("BR", &subInst.pBackRight);
                                     ImGui::SameLine();
                                     ImGui::Checkbox("BL", &subInst.pBackLeft);
                                     ImGui::SameLine();
-                                    ImGui::Checkbox("Rnd", &subInst.pRandom);
-                                    ImGui::SameLine();
+                                    //ImGui::Checkbox("Rnd", &subInst.pRandom);
+                                    //ImGui::SameLine();
                                     ImGui::Checkbox("Movement", &subInst.pDodge);
                                     ImGui::Unindent();
 
@@ -824,7 +803,7 @@
                             strcpy_s(_editStanceNameBuffer, sizeof(_editStanceNameBuffer), currentStanceName);
                         }
                         ImGui::SameLine();
-                        if (ImGui::Button(LOC("add_moveset"))) {
+                        if (ImGui::Button(LOC("add_animation"))) {
                             _isAddModModalOpen = true;
                             _instanceToAddTo = &instance;
                             _modInstanceToAddTo = nullptr;
@@ -861,7 +840,7 @@
                             }
 
                             if (node_open) {
-                                if (ImGui::Button(LOC("add_animation"))) {
+                                if (ImGui::Button(LOC("add_moveset"))) {
                                     _isAddModModalOpen = true;
                                     _modInstanceToAddTo = &modInstance;
                                     _instanceToAddTo = nullptr;
@@ -960,11 +939,16 @@
                                         bool* value;
                                     };
                                     std::vector<CheckboxInfo> checkboxes = {
-                                        {"F", &subInstance.pFront},       {"B", &subInstance.pBack},
-                                        {"L", &subInstance.pLeft},        {"R", &subInstance.pRight},
-                                        {"FR", &subInstance.pFrontRight}, {"FL", &subInstance.pFrontLeft},
-                                        {"BR", &subInstance.pBackRight},  {"BL", &subInstance.pBackLeft},
-                                        {"Rnd", &subInstance.pRandom},    {"Movement", &subInstance.pDodge}};
+                                        {"F", &subInstance.pFront},
+                                        {"FR", &subInstance.pFrontRight},
+                                        {"FL", &subInstance.pFrontLeft},
+                                        {"R", &subInstance.pRight},
+                                        {"L", &subInstance.pLeft},        
+                                        {"B", &subInstance.pBack},
+                                        {"BR", &subInstance.pBackRight},  
+                                        {"BL", &subInstance.pBackLeft},
+                                        //{"Rnd", &subInstance.pRandom},    
+                                        {"Movement", &subInstance.pDodge}};
 
                                     ImGui::GetContentRegionAvail(&contentRegionAvail);
                                     float availableWidth = contentRegionAvail.x;
@@ -1025,7 +1009,6 @@
     void AnimationManager::DrawAnimationManager() {
         if (ImGui::Button(LOC("save"))) {
             SaveAllSettings();
-  
         }
         ImGui::SameLine();
         ImGui::Checkbox(LOC("save_oldconditions"), &_preserveConditions);
@@ -1189,7 +1172,7 @@
             }
             // --- FIM DA LÓGICA DE ORDEM ---
 
-            if (ImGui::Button(LOC("add_moveset"))) {
+            if (ImGui::Button(LOC("add_animation"))) {
                 _isAddModModalOpen = true;
                 _instanceToAddTo = &instance;
                 _modInstanceToAddTo = nullptr;
@@ -1232,7 +1215,7 @@
                 // --- FIM DO DRAG AND DROP ---
 
                 if (node_open) {
-                    if (ImGui::Button(LOC("add_animation"))) {
+                    if (ImGui::Button(LOC("add_moveset"))) {
                         _isAddModModalOpen = true;           // Abre o menu modal
                         _modInstanceToAddTo = &modInstance;  // Aponta para o moveset de NPC atual
                         _instanceToAddTo = nullptr;          // Limpa o ponteiro de instância geral
@@ -1429,6 +1412,45 @@ void AnimationManager::SaveAllSettings() {
             }
         }
 
+        std::map<std::tuple<std::string, int, int>, FileSaveConfig*> parentConfigMap;
+
+        for (auto& pair : fileUpdates) {
+            for (auto& config : pair.second) {
+                if (config.isParent && !config.isNPC) {
+                    auto parentKey =
+                        std::make_tuple(config.category->name, config.instance_index, config.order_in_playlist);
+                    parentConfigMap[parentKey] = &config;  // Armazena o endereço da config do pai
+                }
+            }
+        }
+
+        // Agora, iteramos novamente para encontrar os FILHOS.
+        for (const auto& pair : fileUpdates) {
+            for (const auto& config : pair.second) {
+                if (!config.isParent && !config.isNPC && config.order_in_playlist > 0) {
+                    // Encontra a chave do pai deste filho
+                    auto parentKey =
+                        std::make_tuple(config.category->name, config.instance_index, config.order_in_playlist);
+
+                    // Procura o pai no nosso mapa de ponteiros
+                    auto it = parentConfigMap.find(parentKey);
+                    if (it != parentConfigMap.end()) {
+                        FileSaveConfig* parentConfig = it->second;  // Obtém o ponteiro para o pai
+
+                        // Atualiza o campo 'childDirections' do pai DIRETAMENTE
+                        if (config.pFront) parentConfig->childDirections.insert(1);
+                        if (config.pFrontRight) parentConfig->childDirections.insert(2);
+                        if (config.pRight) parentConfig->childDirections.insert(3);
+                        if (config.pBackRight) parentConfig->childDirections.insert(4);
+                        if (config.pBack) parentConfig->childDirections.insert(5);
+                        if (config.pBackLeft) parentConfig->childDirections.insert(6);
+                        if (config.pLeft) parentConfig->childDirections.insert(7);
+                        if (config.pFrontLeft) parentConfig->childDirections.insert(8);
+                    }
+                }
+            }
+        }
+
         // Lógica para desativar arquivos que não são mais usados (sem alteração)
         for (const auto& managedPath : _managedFiles) {
             if (fileUpdates.find(managedPath) == fileUpdates.end()) {
@@ -1476,7 +1498,7 @@ void AnimationManager::SaveAllSettings() {
             doc.AddMember("name", rapidjson::Value(movesetName.c_str(), allocator), allocator);
         }
 
-        int basePriority = 2000000000;
+        int basePriority = 2100000000;
         bool isUsedAsParent = false;
         for (const auto& config : configs) {
             if (config.isParent) {
@@ -1519,7 +1541,7 @@ void AnimationManager::SaveAllSettings() {
             conditions.PushBack(oldConditionsBlock, allocator);
         }
 
-        std::map<int, std::set<int>> childDirectionsByPlaylist;
+        /*std::map<int, std::set<int>> childDirectionsByPlaylist;
         for (const auto& config : configs) {
             if (!config.isParent) {
                 int playlistId = config.order_in_playlist;
@@ -1534,7 +1556,7 @@ void AnimationManager::SaveAllSettings() {
                     if (config.pFrontLeft) childDirectionsByPlaylist[playlistId].insert(8);
                 }
             }
-        }
+        }*/
 
         if (!configs.empty()) {
             rapidjson::Value masterOrBlock(rapidjson::kObjectType);
@@ -1676,12 +1698,29 @@ void AnimationManager::SaveAllSettings() {
                 if (config.order_in_playlist > 0) {
                     AddCompareValuesCondition(andConditions, "testarone", config.order_in_playlist, allocator);
                     if (config.isParent) {
-                        const auto& childDirs = childDirectionsByPlaylist[config.order_in_playlist];
+                        // Acessa o novo membro diretamente do objeto config!
+                        const auto& childDirs = config.childDirections;
                         if (!childDirs.empty()) {
+
+                            // 1. Cria um novo bloco AND para agrupar as condições negadas
+                            rapidjson::Value negatedAndBlock(rapidjson::kObjectType);
+                            negatedAndBlock.AddMember("condition", "AND", allocator);
+                            negatedAndBlock.AddMember("comment", "Is NOT any child direction", allocator);
+
+                            // 2. Cria um array para as condições dentro deste novo bloco
+                            rapidjson::Value innerNegatedConditions(rapidjson::kArrayType);
+
+                            // 3. Adiciona todas as condições negadas a ESTE NOVO ARRAY
                             for (int dirValue : childDirs) {
-                                AddNegatedCompareValuesCondition(andConditions, "DirecionalCycleMoveset", dirValue,
-                                                                 allocator);
+                                AddNegatedCompareValuesCondition(innerNegatedConditions, "DirecionalCycleMoveset",
+                                                                 dirValue, allocator);
                             }
+
+                            // 4. Associa o array de condições ao novo bloco AND
+                            negatedAndBlock.AddMember("Conditions", innerNegatedConditions, allocator);
+
+                            // 5. Adiciona o bloco AND (que contém todas as negações) ao array principal
+                            andConditions.PushBack(negatedAndBlock, allocator);
                         }
                     } else {
                         if (config.pRandom) {
@@ -1928,7 +1967,6 @@ void AnimationManager::UpdateMaxMovesetCache() {
         rapidjson::Value newCompare(rapidjson::kObjectType);
         newCompare.AddMember("condition", "CompareValues", allocator);
 
-        // ---> A ÚNICA DIFERENÇA ESTÁ AQUI <---
         newCompare.AddMember("negated", true, allocator);
 
         newCompare.AddMember("requiredVersion", "1.0.0.0", allocator);
