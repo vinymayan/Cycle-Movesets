@@ -745,7 +745,7 @@ void GlobalControl::NPCrandomNumber(RE::Actor* targetActor, const std::string& e
     }
     std::string category = GetActorWeaponCategoryName(targetActor);
     int stanceIndex = 0;
-    int maxMovesets = AnimationManager::GetSingleton()->GetMaxMovesetsForNPC(targetActor->GetActorBase()->GetFormID(),
+    int maxMovesets = AnimationManager::GetSingleton()->GetMaxMovesetsForNPC(targetActor,
                                                                              category, stanceIndex);
 
     // LOG ADICIONAL PARA DEBUG

@@ -76,6 +76,9 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         } else {
             SKSE::log::error("Falha ao obter um ClientID da SkyPromptAPI. A API esta instalada?");
         }
+        AnimationManager::GetSingleton()->PopulateNpcList();
+        AnimationManager::GetSingleton()->LoadGameDataForNpcRules();
+        
     }
 
     if (message->type == SKSE::MessagingInterface::kNewGame || message->type == SKSE::MessagingInterface::kPostLoadGame) {
@@ -126,7 +129,7 @@ SKSEPluginLoad(const SKSE::LoadInterface *skse) {
     }
 
     UI::RegisterMenu();
-
+    
 
 
     return true;

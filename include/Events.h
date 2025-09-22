@@ -9,6 +9,48 @@
 
 struct FileSaveConfig;
 
+struct NpcMovesetResult {
+    int count = 0;
+    int priority = 0;
+};
+
+// Enum para os tipos de regra
+enum class RuleType { UniqueNPC, Faction, Keyword, Race, GeneralNPC, Player };
+
+// Structs para guardar os dados carregados do jogo (para os pop-ups de seleção)
+struct FactionInfo {
+    RE::FormID formID;
+    std::string editorID;
+    std::string pluginName;
+};
+
+struct KeywordInfo {
+    RE::FormID formID;
+    std::string editorID;
+    std::string pluginName;
+};
+
+struct RaceInfo {
+    RE::FormID formID;
+    std::string editorID;
+    std::string fullName;
+    std::string pluginName;
+};
+
+struct MovesetRule {
+    RuleType type;
+    std::string displayName;  // Nome amigável para a UI (ex: "Ulfric Stormcloak", "BanditFaction")
+    std::string identifier;   // O identificador único (FormID em string ou EditorID)
+    std::string pluginName;   // Relevante para FormIDs
+    RE::FormID formID;
+    // Cada regra tem seu próprio conjunto de categorias de armas.
+    // Reutiliza a mesma estrutura que você já tem para o jogador e NPCs.
+    std::map<std::string, WeaponCategory> categories;
+};
+
+RuleType RuleTypeFromString(const std::string& s);
+std::string RuleTypeToString(RuleType type);
+
 class AnimationManager : public clib_util::singleton::ISingleton<AnimationManager> {
 public:
     void ScanAnimationMods();
@@ -16,7 +58,7 @@ public:
     void DrawUserMovesetCreator();
     void DrawNPCMenu();
     static int GetMaxMovesetsFor(const std::string& category, int stanceIndex);
-    static int GetMaxMovesetsForNPC(RE::FormID npcFormID, const std::string& category, int stanceIndex);
+    int GetMaxMovesetsForNPC(RE::Actor* targetActor, const std::string& category, int stanceIndex);
     const std::map<std::string, WeaponCategory>& GetCategories() const;
     std::string GetStanceName(const std::string& categoryName, int stanceIndex);
 
@@ -24,6 +66,9 @@ public:
                                       int directionalState);
     bool _showRestartPopup = false; 
     void ScanDarAnimations();
+    void LoadGameDataForNpcRules();
+    void PopulateNpcList();
+    NpcMovesetResult FindBestMovesetConfiguration(RE::Actor* actor, const std::string& categoryName);
 
 private:
     std::map<std::string, WeaponCategory> _categories;
@@ -136,6 +181,7 @@ private:
     void LoadStateForSubAnimation(size_t modIdx, size_t subAnimIdx);
 
     // --- NOVAS FUNÇÕES DE CARREGAMENTO/SALVAMENTO DA UI ---
+
     void SaveCycleMovesets();
     void LoadCycleMovesets();
 
@@ -242,13 +288,43 @@ private:
     std::map<RE::FormID, SpecificNpcConfig> _specificNpcConfigs;
 
     // --- Novas Funções Privadas ---
-    void PopulateNpcList();
+    
     void DrawNpcSelectionModal();
 
     void PopulateHkxFiles(CreatorSubAnimationInstance& instance);
 
     RE::FormID _currentlySelectedNpcFormID = 0;
     std::vector<const char*> _npcSelectorList;
+
+     // --- ADICIONE AS NOVAS ESTRUTURAS ---
+    std::vector<MovesetRule> _npcRules;  // A lista principal com todas as regras criadas
+
+    // Listas para popular os menus de seleção
+    std::vector<FactionInfo> _allFactions;
+    std::vector<KeywordInfo> _allKeywords;
+    std::vector<RaceInfo> _allRaces;
+    MovesetRule _generalNpcRule; 
+    // --- ADICIONE ESTAS NOVAS VARIÁVEIS PARA A UI DE REGRAS ---
+    int _ruleFilterType = 0;  // 0=Todos, 1=NPC, 2=Keyword, 3=Facção, 4=Raça
+    char _ruleFilterText[128] = "";
+
+    // Para controlar qual regra está sendo editada
+    MovesetRule* _ruleToEdit = nullptr;
+    ModInstance* _instanceBeingEdited = nullptr;
+    // Para controlar o pop-up de criação de regras
+    bool _isCreateRuleModalOpen = false;
+    RuleType _ruleTypeToCreate;
+    // --- FIM DA ADIÇÃO ---
+    void AddIsActorBaseCondition(rapidjson::Value& conditionsArray, const std::string& plugin, RE::FormID formID,
+                                 bool negated, rapidjson::Document::AllocatorType& allocator);
+    void AddIsInFactionCondition(rapidjson::Value& conditionsArray, const std::string& plugin, RE::FormID formID,
+                                 rapidjson::Document::AllocatorType& allocator);
+    void AddHasKeywordCondition(rapidjson::Value& conditionsArray, const std::string& plugin, RE::FormID formID,
+                                rapidjson::Document::AllocatorType& allocator);
+    void AddIsRaceCondition(rapidjson::Value& conditionsArray, const std::string& plugin, RE::FormID formID,
+                            rapidjson::Document::AllocatorType& allocator);
+    int GetPriorityForType(RuleType type);
+    
 };
 
 struct FileSaveConfig {
@@ -260,7 +336,10 @@ struct FileSaveConfig {
     std::set<int> childDirections;
     bool isNPC = false;
     RE::FormID npcFormID = 0;
+    RuleType ruleType;
+    RE::FormID formID;
     std::string pluginName;
+    std::string ruleIdentifier;
     bool pFront = false;
     bool pBack = false;
     bool pLeft = false;
@@ -272,3 +351,4 @@ struct FileSaveConfig {
     bool pRandom = false;
     bool pDodge = false;
 };
+

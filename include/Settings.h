@@ -44,6 +44,8 @@ struct ModInstance {
     size_t sourceModIndex;
     bool isSelected = true;
     std::vector<SubAnimationInstance> subAnimationInstances;
+    int level = 0;  // Condição de Nível Mínimo
+    int hp = 100;   // Condição de HP Máximo (em porcentagem)
 };
 
 struct CategoryInstance {
