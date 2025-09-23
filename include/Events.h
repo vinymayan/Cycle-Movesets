@@ -14,6 +14,7 @@ struct NpcMovesetResult {
     int priority = 0;
 };
 
+
 // Enum para os tipos de regra
 enum class RuleType { UniqueNPC, Faction, Keyword, Race, GeneralNPC, Player };
 
@@ -48,6 +49,12 @@ struct MovesetRule {
     std::map<std::string, WeaponCategory> categories;
 };
 
+struct NpcRuleMatch {
+    const MovesetRule* rule = nullptr;  // O ponteiro que precisamos!
+    int movesetCount = 0;
+    int priority = 0;
+};
+
 RuleType RuleTypeFromString(const std::string& s);
 std::string RuleTypeToString(RuleType type);
 
@@ -68,7 +75,9 @@ public:
     void ScanDarAnimations();
     void LoadGameDataForNpcRules();
     void PopulateNpcList();
-    NpcMovesetResult FindBestMovesetConfiguration(RE::Actor* actor, const std::string& categoryName);
+    NpcRuleMatch FindBestMovesetConfiguration(RE::Actor* actor, const std::string& categoryName);
+
+    std::vector<int> GetAvailableMovesetIndices(RE::Actor* actor, const std::string& categoryName);
 
 private:
     std::map<std::string, WeaponCategory> _categories;

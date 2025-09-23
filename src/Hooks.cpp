@@ -730,32 +730,32 @@
         return 0;
     }
 
-int AnimationManager::GetMaxMovesetsForNPC(RE::Actor* actor, const std::string& category, int stanceIndex) {
-        // A verificação de stanceIndex é mantida por compatibilidade, embora a nova lógica não a utilize.
-        if (stanceIndex < 0 || stanceIndex >= 4) {
-            return 0;
-        }
-        if (!actor) {
-            return 0;
-        }
-        // 1. Tenta encontrar o Ator no jogo a partir do FormID fornecido.
-        // Esta é a etapa crucial de conversão.
-        SKSE::log::info("[GetMaxMovesetsForNPC] Ator recebido. Chamando FindBestMovesetConfiguration...");
-
-        // 2. Chama a nossa nova função principal para fazer a busca com fallback e prioridade.
-        NpcMovesetResult result = FindBestMovesetConfiguration(actor, category);
-
-        SKSE::log::info(
-            "[GetMaxMovesetsForNPC] Resultado recebido -> Contagem: {}, Prioridade: {}. Setando variável de "
-            "prioridade.",
-            result.count, result.priority);
-
-        actor->SetGraphVariableInt("CycleMovesetNpcType", result.priority);
-
-        SKSE::log::info("[GetMaxMovesetsForNPC] Retornando contagem final: {}", result.count);
-        // 4. Retorna a contagem de movesets, cumprindo o contrato original da função.
-        return result.count;
-    }
+//int AnimationManager::GetMaxMovesetsForNPC(RE::Actor* actor, const std::string& category, int stanceIndex) {
+//        // A verificação de stanceIndex é mantida por compatibilidade, embora a nova lógica não a utilize.
+//        if (stanceIndex < 0 || stanceIndex >= 4) {
+//            return 0;
+//        }
+//        if (!actor) {
+//            return 0;
+//        }
+//        // 1. Tenta encontrar o Ator no jogo a partir do FormID fornecido.
+//        // Esta é a etapa crucial de conversão.
+//        SKSE::log::info("[GetMaxMovesetsForNPC] Ator recebido. Chamando FindBestMovesetConfiguration...");
+//
+//        // 2. Chama a nossa nova função principal para fazer a busca com fallback e prioridade.
+//        NpcRuleMatch result = FindBestMovesetConfiguration(actor, category);
+//
+//        SKSE::log::info(
+//            "[GetMaxMovesetsForNPC] Resultado recebido -> Contagem: {}, Prioridade: {}. Setando variável de "
+//            "prioridade.",
+//            result.count, result.priority);
+//
+//        actor->SetGraphVariableInt("CycleMovesetNpcType", result.priority);
+//
+//        SKSE::log::info("[GetMaxMovesetsForNPC] Retornando contagem final: {}", result.count);
+//        // 4. Retorna a contagem de movesets, cumprindo o contrato original da função.
+//        return result.count;
+//    }
 
     const std::map<std::string, WeaponCategory>& AnimationManager::GetCategories() const { 
         return _categories; }
@@ -3072,77 +3072,80 @@ void AnimationManager::SaveCycleMovesets() {
                 outFile << buffer.GetString();
             }
 
-            {
-                rapidjson::Document cycleMovesetDoc;
-                cycleMovesetDoc.SetArray();
-                auto& allocator = cycleMovesetDoc.GetAllocator();
+            rapidjson::Document cycleMovesetDoc;
+            cycleMovesetDoc.SetArray();
+            auto& allocator = cycleMovesetDoc.GetAllocator();
 
-                rapidjson::Value playerObj(rapidjson::kObjectType);
-                playerObj.AddMember("Name", "Player", allocator);
-                // O FormID para Player é o próprio nome, para consistência com a lógica de carregamento
-                playerObj.AddMember("FormID", "Player", allocator);
-                rapidjson::Value menuArray(rapidjson::kArrayType);
+            // Cria um único objeto de Perfil para o Player
+            rapidjson::Value profileObj(rapidjson::kObjectType);
+            profileObj.AddMember("Type", "Player", allocator);
+            profileObj.AddMember("Name", "Player", allocator);
+            profileObj.AddMember("FormID", "00000007", allocator);
+            profileObj.AddMember("Plugin", "Skyrim.esm", allocator);
+            profileObj.AddMember("Identifier", "Player", allocator);
 
-                // Agrupa as configurações por categoria para este submoveset
-                std::map<std::string, std::vector<const FileSaveConfig*>> configsByCategory;
-                for (const auto& config : data.configs) {
-                    configsByCategory[config.category->name].push_back(&config);
-                }
+            rapidjson::Value menuArray(rapidjson::kArrayType);
 
-                for (const auto& catPair : configsByCategory) {
-                    rapidjson::Value categoryObj(rapidjson::kObjectType);
-                    categoryObj.AddMember("Category", rapidjson::Value(catPair.first.c_str(), allocator), allocator);
-                    rapidjson::Value stancesArray(rapidjson::kArrayType);
-
-                    // Agrupa as configurações por stance
-                    std::map<int, std::vector<const FileSaveConfig*>> configsByStance;
-                    for (const auto* configPtr : catPair.second) {
-                        configsByStance[configPtr->instance_index].push_back(configPtr);
-                    }
-
-                    for (const auto& stancePair : configsByStance) {
-                        rapidjson::Value newStanceObj(rapidjson::kObjectType);
-                        newStanceObj.AddMember("index", stancePair.first, allocator);
-                        newStanceObj.AddMember("type", "moveset", allocator);
-                        newStanceObj.AddMember("name", rapidjson::Value(movesetName.c_str(), allocator), allocator);
-
-                        rapidjson::Value animationsArray(rapidjson::kArrayType);
-                        for (const auto* configPtr : stancePair.second) {
-                            rapidjson::Value animObj(rapidjson::kObjectType);
-                            animObj.AddMember("index", configPtr->order_in_playlist, allocator);
-                            animObj.AddMember("sourceModName", rapidjson::Value(movesetName.c_str(), allocator),
-                                              allocator);
-                            animObj.AddMember("sourceSubName", rapidjson::Value(subName.c_str(), allocator), allocator);
-                            animObj.AddMember("sourceConfigPath",
-                                              rapidjson::Value(subMovesetPath.string().c_str(), allocator), allocator);
-                            animObj.AddMember("pFront", configPtr->pFront, allocator);
-                            animObj.AddMember("pBack", configPtr->pBack, allocator);
-                            animObj.AddMember("pLeft", configPtr->pLeft, allocator);
-                            animObj.AddMember("pRight", configPtr->pRight, allocator);
-                            animObj.AddMember("pFrontRight", configPtr->pFrontRight, allocator);
-                            animObj.AddMember("pFrontLeft", configPtr->pFrontLeft, allocator);
-                            animObj.AddMember("pBackRight", configPtr->pBackRight, allocator);
-                            animObj.AddMember("pBackLeft", configPtr->pBackLeft, allocator);
-                            animObj.AddMember("pRandom", configPtr->pRandom, allocator);
-                            animObj.AddMember("pDodge", configPtr->pDodge, allocator);
-                            animationsArray.PushBack(animObj, allocator);
-                        }
-                        newStanceObj.AddMember("animations", animationsArray, allocator);
-                        stancesArray.PushBack(newStanceObj, allocator);
-                    }
-                    categoryObj.AddMember("stances", stancesArray, allocator);
-                    menuArray.PushBack(categoryObj, allocator);
-                }
-
-                playerObj.AddMember("Menu", menuArray, allocator);
-                cycleMovesetDoc.PushBack(playerObj, allocator);
-
-                std::ofstream outFile(subMovesetPath / "CycleMoveset.json");
-                rapidjson::StringBuffer buffer;
-                rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
-                cycleMovesetDoc.Accept(writer);
-                outFile << buffer.GetString();
+            // A lógica interna para agrupar e criar os objetos de categoria, stance e animação
+            // permanece a mesma, pois já estava correta.
+            std::map<std::string, std::vector<const FileSaveConfig*>> configsByCategory;
+            for (const auto& config : data.configs) {
+                configsByCategory[config.category->name].push_back(&config);
             }
+
+            for (const auto& catPair : configsByCategory) {
+                rapidjson::Value categoryObj(rapidjson::kObjectType);
+                categoryObj.AddMember("Category", rapidjson::Value(catPair.first.c_str(), allocator), allocator);
+                rapidjson::Value stancesArray(rapidjson::kArrayType);
+
+                std::map<int, std::vector<const FileSaveConfig*>> configsByStance;
+                for (const auto* configPtr : catPair.second) {
+                    configsByStance[configPtr->instance_index].push_back(configPtr);
+                }
+
+                for (const auto& stancePair : configsByStance) {
+                    rapidjson::Value newStanceObj(rapidjson::kObjectType);
+                    newStanceObj.AddMember("index", stancePair.first, allocator);
+                    newStanceObj.AddMember("type", "moveset", allocator);
+                    newStanceObj.AddMember("name", rapidjson::Value(movesetName.c_str(), allocator), allocator);
+                    newStanceObj.AddMember("level", 0, allocator);  // Adiciona valores padrão
+                    newStanceObj.AddMember("hp", 100, allocator);   // Adiciona valores padrão
+
+                    rapidjson::Value animationsArray(rapidjson::kArrayType);
+                    for (const auto* configPtr : stancePair.second) {
+                        rapidjson::Value animObj(rapidjson::kObjectType);
+                        animObj.AddMember("index", configPtr->order_in_playlist, allocator);
+                        animObj.AddMember("sourceModName", rapidjson::Value(movesetName.c_str(), allocator), allocator);
+                        animObj.AddMember("sourceSubName", rapidjson::Value(subName.c_str(), allocator), allocator);
+                        animObj.AddMember("sourceConfigPath",
+                                          rapidjson::Value(subMovesetPath.string().c_str(), allocator), allocator);
+                        animObj.AddMember("pFront", configPtr->pFront, allocator);
+                        animObj.AddMember("pBack", configPtr->pBack, allocator);
+                        animObj.AddMember("pLeft", configPtr->pLeft, allocator);
+                        animObj.AddMember("pRight", configPtr->pRight, allocator);
+                        animObj.AddMember("pFrontRight", configPtr->pFrontRight, allocator);
+                        animObj.AddMember("pFrontLeft", configPtr->pFrontLeft, allocator);
+                        animObj.AddMember("pBackRight", configPtr->pBackRight, allocator);
+                        animObj.AddMember("pBackLeft", configPtr->pBackLeft, allocator);
+                        animObj.AddMember("pRandom", configPtr->pRandom, allocator);
+                        animObj.AddMember("pDodge", configPtr->pDodge, allocator);
+                        animationsArray.PushBack(animObj, allocator);
+                    }
+                    newStanceObj.AddMember("animations", animationsArray, allocator);
+                    stancesArray.PushBack(newStanceObj, allocator);
+                }
+                categoryObj.AddMember("stances", stancesArray, allocator);
+                menuArray.PushBack(categoryObj, allocator);
+            }
+
+            profileObj.AddMember("Menu", menuArray, allocator);
+            cycleMovesetDoc.PushBack(profileObj, allocator);
+
+            std::ofstream outFile(subMovesetPath / "CycleMoveset.json");
+            rapidjson::StringBuffer buffer;
+            rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
+            cycleMovesetDoc.Accept(writer);
+            outFile << buffer.GetString();
             // A lógica para gerar o CycleMoveset.json (se você a mantiver) permanece a mesma,
             // pois ela já é baseada nas FileSaveConfig, que foram corretamente agrupadas.
         }
@@ -4191,17 +4194,22 @@ void AnimationManager::LoadGameDataForNpcRules() {
         }
     }
 
-    NpcMovesetResult AnimationManager::FindBestMovesetConfiguration(RE::Actor* actor, const std::string& categoryName) {
+    NpcRuleMatch AnimationManager::FindBestMovesetConfiguration(RE::Actor* actor, const std::string& categoryName) {
         if (!actor) {
-            return {0, 0};
+            // Retorna a regra geral como padrão, mesmo que vazia
+            SKSE::log::info("[FindBestMoveset] Ator nulo fornecido. Retornando regra geral padrão.");
+            return {&_generalNpcRule, 0, GetPriorityForType(RuleType::GeneralNPC)};
         }
-
-        // A ordem neste vetor define a prioridade de busca
+        SKSE::log::info("=====================================================================");
+        SKSE::log::info("[FindBestMoveset] Inciando busca para o ator: '{}' ({:08X}), Categoria: '{}'",
+                        actor->GetName(), actor->GetFormID(), categoryName);
+    
         const std::vector<RuleType> priorityOrder = {RuleType::UniqueNPC, RuleType::Keyword, RuleType::Faction,
                                                      RuleType::Race};
 
         // Itera pela ordem de prioridade dos TIPOS de regra
         for (const auto& typeToFind : priorityOrder) {
+            SKSE::log::info("[FindBestMoveset] Checando regras do tipo: {}", RuleTypeToString(typeToFind));
             // Itera pela lista de regras da UI (respeitando a sub-prioridade da ordem da lista)
             for (const auto& rule : _npcRules) {
                 if (rule.type != typeToFind) continue;
@@ -4220,7 +4228,8 @@ void AnimationManager::LoadGameDataForNpcRules() {
                             match = true;
                         break;
                     case RuleType::Race:
-                        if (actor->GetRace() == RE::TESForm::LookupByEditorID<RE::TESRace>(rule.identifier))
+                        if (actor->GetActorBase()->GetRace() ==
+                            RE::TESForm::LookupByEditorID<RE::TESRace>(rule.identifier))
                             match = true;
                         break;
                     default:
@@ -4228,19 +4237,20 @@ void AnimationManager::LoadGameDataForNpcRules() {
                 }
 
                 if (match) {
-                    // Se a regra bate, verifica se ela tem a categoria de arma que procuramos
                     auto category_it = rule.categories.find(categoryName);
                     if (category_it != rule.categories.end()) {
+                        SKSE::log::info("    [MATCH!] A regra '{}' se aplica ao ator.", rule.displayName);
                         const auto& category = category_it->second;
-                        // Calcula a contagem de movesets para a stance 0 (NPCs)
                         int count = 0;
+                        // Calcula a contagem de movesets selecionados (ainda útil ter essa info)
                         for (const auto& modInst : category.instances[0].modInstances) {
                             if (modInst.isSelected) count++;
                         }
 
-                        // Se encontrou uma configuração válida (count > 0), retorna o resultado
                         if (count > 0) {
-                            return {count, GetPriorityForType(rule.type)};
+                            SKSE::log::info("    -> Categoria tem {} movesets. RETORNANDO ESTA REGRA.", count);
+                            // AQUI ESTÁ A MUDANÇA: Retornamos um ponteiro para a regra atual (&rule)
+                            return {&rule, count, GetPriorityForType(rule.type)};
                         }
                     }
                 }
@@ -4254,11 +4264,86 @@ void AnimationManager::LoadGameDataForNpcRules() {
             for (const auto& modInst : category_it->second.instances[0].modInstances) {
                 if (modInst.isSelected) count++;
             }
-            if (count > 0) {
-                return {count, GetPriorityForType(RuleType::GeneralNPC)};
+            // Retorna o ponteiro para a regra geral
+            return {&_generalNpcRule, count, GetPriorityForType(RuleType::GeneralNPC)};
+        }
+
+        // Fallback final: retorna a regra geral mesmo que não tenha a categoria
+        return {&_generalNpcRule, 0, GetPriorityForType(RuleType::GeneralNPC)};
+    }
+
+    std::vector<int> AnimationManager::GetAvailableMovesetIndices(RE::Actor* actor, const std::string& categoryName) {
+        if (!actor) return {};
+        SKSE::log::info("---------------------------------------------------------------------");
+        SKSE::log::info("[GetAvailableIndices] Buscando índices para o ator: '{}', Categoria: '{}'", actor->GetName(),
+                        categoryName);
+
+        // 1. Chama a função modificada para obter o "match" completo
+        NpcRuleMatch match = FindBestMovesetConfiguration(actor, categoryName);
+        actor->SetGraphVariableInt("CycleMovesetNpcType", match.priority);
+        // 2. Acessa o ponteiro da regra diretamente do resultado
+        const MovesetRule* rule = match.rule;
+
+        // Medida de segurança, embora a função deva sempre retornar um ponteiro válido
+        if (!rule) {
+            SKSE::log::error("FindBestMovesetConfiguration retornou um ponteiro nulo inesperadamente!");
+            return {};
+        }
+        SKSE::log::info("[GetAvailableIndices] Regra determinada: '{}'", rule->displayName);
+        // 2. Encontra a categoria de arma dentro da regra
+        auto categoryIt = rule->categories.find(categoryName);
+        if (categoryIt == rule->categories.end()) {
+            SKSE::log::warn("[GetAvailableIndices] A regra '{}' não possui a categoria '{}'. Retornando lista vazia.",
+                            rule->displayName, categoryName);
+            return {};
+        }
+        const CategoryInstance& instance = categoryIt->second.instances[0];  // Stance 0 para NPCs
+
+        // 3. Obtém as estatísticas atuais do ator
+        // *** CÁLCULO DE HP CORRIGIDO ***
+        float currentHealth = actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth);
+        float maxHealth = actor->GetActorValueMax(RE::ActorValue::kHealth);
+        // Evita divisão por zero se o ator tiver 0 de vida máxima por algum motivo
+        float hpPercent = (maxHealth > 0) ? (currentHealth / maxHealth) * 100.0f : 0.0f;
+        int level = actor->GetLevel();
+        // Futuramente, adicione aqui:
+        // float staminaPercent = actor->GetActorValuePercentage(RE::ActorValue::kStamina) * 100.0f;
+        // float magickaPercent = actor->GetActorValuePercentage(RE::ActorValue::kMagicka) * 100.0f;
+        SKSE::log::info("[GetAvailableIndices] Status atuais do ator -> HP: {:.2f} ({:.2f}/{:.2f}), Nível: {}",
+                        hpPercent, currentHealth, maxHealth, level);
+        std::vector<int> availableIndices;
+        int currentPlaylistIndex = 1;  // OAR começa a contagem em 1
+
+        // 4. Itera sobre todos os movesets configurados e filtra
+        for (const auto& modInst : instance.modInstances) {
+            if (modInst.isSelected) {
+                const auto& sourceMod = _allMods[modInst.sourceModIndex];
+                SKSE::log::info("  -> Checando moveset #{}: '{}'", currentPlaylistIndex, sourceMod.name);
+
+                // 5. AQUI ESTÁ A MÁGICA: Verifica as condições
+                bool conditionsMet = (hpPercent <= modInst.hp && level >= modInst.level);
+                // Futuramente, adicione aqui:
+                // && staminaPercent <= modInst.stamina && magickaPercent <= modInst.magicka
+                SKSE::log::info("     Condição: (HP {:.2f} <= {} && Nível {} >= {}) -> Resultado: {}", hpPercent,
+                               modInst.hp, level, modInst.level, conditionsMet ? "VÁLIDO" : "INVÁLIDO");
+
+                if (conditionsMet) {
+                    // Este moveset é válido! Adiciona seu número de playlist à lista.
+                    availableIndices.push_back(currentPlaylistIndex);
+                }
+
+                currentPlaylistIndex++;
             }
         }
 
-        // Se absolutamente nada foi encontrado
-        return {0, GetPriorityForType(RuleType::GeneralNPC)};  // Retorna prioridade 0 para resetar
+        // Log final com a lista de resultados
+        std::string result_string = "[ ";
+        for (int idx : availableIndices) {
+            result_string += std::to_string(idx) + " ";
+        }
+        result_string += "]";
+        SKSE::log::info("[GetAvailableIndices] Filtro concluído. Retornando índices disponíveis: {}", result_string);
+        SKSE::log::info("---------------------------------------------------------------------");
+
+        return availableIndices;
     }

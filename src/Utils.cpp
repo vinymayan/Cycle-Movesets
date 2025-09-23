@@ -740,59 +740,47 @@ RE::BSEventNotifyControl GlobalControl::NpcCycleSink::ProcessEvent(const RE::BSA
 }
 
 void GlobalControl::NPCrandomNumber(RE::Actor* targetActor, const std::string& eventSource) {
-    if (!targetActor) {
-        return;
-    }
+    if (!targetActor) return;
+
     std::string category = GetActorWeaponCategoryName(targetActor);
-    int stanceIndex = 0;
-    int maxMovesets = AnimationManager::GetSingleton()->GetMaxMovesetsForNPC(targetActor,
-                                                                             category, stanceIndex);
 
-    // LOG ADICIONAL PARA DEBUG
-    SKSE::log::info("NPCrandomNumber para o ator {:08X} (Categoria: '{}') encontrou maxMovesets = {}",
-                    targetActor->GetFormID(), category, maxMovesets);
-    
-    // Alterado para 2, pois com 2 ainda é possível alternar
-    if (maxMovesets < 2) {
+    // Pega a lista de índices de movesets DISPONÍVEIS AGORA
+    std::vector<int> availableMovesets =
+        AnimationManager::GetSingleton()->GetAvailableMovesetIndices(targetActor, category);
+
+    if (availableMovesets.size() < 2) {  // Não há o que ciclar se tiver 0 ou 1 opção
+        // Opcional: Se houver 1, você pode setar para ele. Se 0, não faz nada.
+        if (!availableMovesets.empty()) {
+            targetActor->SetGraphVariableInt("testarone", availableMovesets[0]);
+        }
         return;
     }
-    RE::FormID formID = targetActor->GetFormID();
 
-    // Precisamos do estado para saber os últimos movesets usados
+    // A lógica de "random inteligente" agora opera sobre a lista de movesets válidos
+    RE::FormID formID = targetActor->GetFormID();
     std::lock_guard<std::mutex> lock(g_comboStateMutex);
     auto& state = g_npcComboStates[formID];
-    // Lógica de geração "inteligente" simplificada
-    std::vector<int> availableMovesets;
-    for (int i = 1; i <= maxMovesets; ++i) {
-        // Deve usar o estado do NPC ('state'), não o estado global do player.
-        if (i != state.lastMoveset && i != state.previousMoveset) {
-            availableMovesets.push_back(i);
-        }
+
+    // Filtra a lista para não repetir os 2 últimos
+    std::vector<int> choices = availableMovesets;
+    choices.erase(std::remove(choices.begin(), choices.end(), state.lastMoveset), choices.end());
+    choices.erase(std::remove(choices.begin(), choices.end(), state.previousMoveset), choices.end());
+
+    if (choices.empty()) {  // Se todos os válidos foram usados recentemente, usa a lista completa
+        choices = availableMovesets;
     }
 
-    // Se todos os movesets foram usados recentemente, reseta a lista para evitar ficar sem opções
-    if (availableMovesets.empty()) {
-        for (int i = 1; i <= maxMovesets; ++i) {
-            availableMovesets.push_back(i);
-        }
-    }
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> distrib(0, static_cast<int>(choices.size() - 1));
+    int chosenPlaylistIndex = choices[distrib(gen)];
 
-    if (!availableMovesets.empty()) {
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> distrib(0, static_cast<int>(availableMovesets.size() - 1));
+    // Atualiza o estado e a variável do jogo
+    targetActor->SetGraphVariableInt("testarone", chosenPlaylistIndex);
+    state.previousMoveset = state.lastMoveset;
+    state.lastMoveset = chosenPlaylistIndex;
 
-        // PONTO 1: O número gerado agora é diretamente um dos movesets disponíveis
-        int randomNumber = availableMovesets[distrib(gen)];
-
-        targetActor->SetGraphVariableInt("testarone", randomNumber);
-        targetActor->SetGraphVariableInt("cycle_instance", 0);
-        state.previousMoveset = state.lastMoveset;
-        state.lastMoveset = randomNumber;
-
-        SKSE::log::info("{} (Ator {:08X}, {} movesets): Número gerado: {}", eventSource, formID, maxMovesets,randomNumber);
-    }
-    
+    SKSE::log::info("{} (Ator {:08X}): Escolheu o moveset #{}", eventSource, formID, chosenPlaylistIndex);
 }
 
 RE::BSEventNotifyControl GlobalControl::NpcCombatTracker::ProcessEvent(const RE::TESCombatEvent* a_event,
