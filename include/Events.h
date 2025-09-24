@@ -9,11 +9,6 @@
 
 struct FileSaveConfig;
 
-struct NpcMovesetResult {
-    int count = 0;
-    int priority = 0;
-};
-
 
 // Enum para os tipos de regra
 enum class RuleType { UniqueNPC, Faction, Keyword, Race, GeneralNPC, Player };
@@ -65,7 +60,7 @@ public:
     void DrawUserMovesetCreator();
     void DrawNPCMenu();
     static int GetMaxMovesetsFor(const std::string& category, int stanceIndex);
-    int GetMaxMovesetsForNPC(RE::Actor* targetActor, const std::string& category, int stanceIndex);
+    //int GetMaxMovesetsForNPC(RE::Actor* targetActor, const std::string& category, int stanceIndex);
     const std::map<std::string, WeaponCategory>& GetCategories() const;
     std::string GetStanceName(const std::string& categoryName, int stanceIndex);
 
@@ -111,7 +106,7 @@ private:
     // Para colocar direcionais no pai
     void AddNegatedCompareValuesCondition(rapidjson::Value& conditionsArray, const std::string& graphVarName, int value,
                                           rapidjson::Document::AllocatorType& allocator);
-    void AddOcfWeaponExclusionConditions(rapidjson::Value& parentArray, rapidjson::Document::AllocatorType& allocator);
+    //void AddOcfWeaponExclusionConditions(rapidjson::Value& parentArray, rapidjson::Document::AllocatorType& allocator);
 
     void AddKeywordCondition(rapidjson::Value& parentArray, const std::string& editorID, bool isLeftHand, bool negated,
                              rapidjson::Document::AllocatorType& allocator);

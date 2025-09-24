@@ -637,8 +637,7 @@ RE::BSEventNotifyControl GlobalControl::AnimationEventHandler::ProcessEvent(
     if (g_comboState.isTimerRunning) {
         auto now = std::chrono::steady_clock::now();
         auto time_left_ms = std::chrono::duration_cast<std::chrono::milliseconds>(g_comboState.comboTimeoutTimestamp - now).count();
-        SKSE::log::info("[UpdateHandler] Checando timer... g_comboState.isTimerRunning: {}. Tempo restante: {} ms", g_comboState.isTimerRunning,
-                        time_left_ms);
+        //SKSE::log::info("[UpdateHandler] Checando timer... g_comboState.isTimerRunning: {}. Tempo restante: {} ms", g_comboState.isTimerRunning,time_left_ms);
     }
     
 
@@ -698,8 +697,7 @@ RE::BSEventNotifyControl GlobalControl::NpcCycleSink::ProcessEvent(const RE::BSA
             auto timeout_ms = std::chrono::milliseconds(static_cast<int>(fComboTimeout * 1000));
             state.comboTimeoutTimestamp = std::chrono::steady_clock::now() + timeout_ms;
 
-            SKSE::log::info("[AnimationEventHandler] Ator {:08X} iniciou/resetou combo com evento '{}'.", formID,
-                            eventName);
+            //SKSE::log::info("[AnimationEventHandler] Ator {:08X} iniciou/resetou combo com evento '{}'.", formID, eventName);
 
         } else if (eventName == "weaponDraw" || eventName == "weaponSheathe") {
             std::lock_guard<std::mutex> lock(g_comboStateMutex);

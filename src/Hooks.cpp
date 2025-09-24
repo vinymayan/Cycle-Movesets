@@ -126,7 +126,11 @@
             for (const auto& fileEntry : std::filesystem::directory_iterator(destinationPath)) {
                 if (fileEntry.is_regular_file()) {
                     std::string filename = fileEntry.path().filename().string();
-                    if (filename.rfind("mco_", 0) == 0) {
+                    std::string lower_filename = filename;
+                    // 2. Converte a cópia para minúsculas.
+                    std::transform(lower_filename.begin(), lower_filename.end(), lower_filename.begin(),
+                                   [](unsigned char c) { return std::tolower(c); });
+                    if (lower_filename.rfind("mco_", 0) == 0) {
                         std::string newFilename = filename;
                         newFilename.replace(0, 4, "BFCO_");
                         std::filesystem::path newFilePath = destinationPath / newFilename;
@@ -2961,7 +2965,9 @@ void AnimationManager::SaveCycleMovesets() {
 
             auto& stances = _movesetCreatorStances.at(cat->name);
             for (int i = 0; i < 4; ++i) {
-                if (!_newMovesetStanceEnabled[i]) continue;
+                // A flag _newMovesetStanceEnabled foi removida pois não existia no código original,
+                // a verificação será feita pela existência de submovesets na stance.
+                if (stances[i].subMovesets.empty()) continue;
 
                 int playlistParentCounter = 1;
                 int lastParentOrder = 0;
@@ -2978,6 +2984,16 @@ void AnimationManager::SaveCycleMovesets() {
                     if (isParent) lastParentOrder = order;
 
                     FileSaveConfig config;
+
+                    // ===== INÍCIO DA CORREÇÃO =====
+                    // Adiciona as informações da regra do Player ao config.
+                    // Movesets criados por esta ferramenta são sempre para o Player.
+                    config.ruleType = RuleType::Player;
+                    config.formID = 0x7;
+                    config.pluginName = "Skyrim.esm";
+                    config.ruleIdentifier = "Player";
+                    // ===== FIM DA CORREÇÃO =====
+
                     config.category = cat;
                     config.instance_index = i + 1;
                     config.isParent = isParent;
@@ -2994,7 +3010,6 @@ void AnimationManager::SaveCycleMovesets() {
                     config.pDodge = subInst.pDodge;
 
                     uniqueSubmovesets[subName].configs.push_back(config);
-                    // EM VEZ DE SOBRESCREVER, ADICIONA À LISTA
                     uniqueSubmovesets[subName].instances.push_back(&subInst);
                 }
             }
@@ -3072,82 +3087,93 @@ void AnimationManager::SaveCycleMovesets() {
                 outFile << buffer.GetString();
             }
 
-            rapidjson::Document cycleMovesetDoc;
-            cycleMovesetDoc.SetArray();
-            auto& allocator = cycleMovesetDoc.GetAllocator();
+            {
+                rapidjson::Document cycleMovesetDoc;
+                cycleMovesetDoc.SetArray();  // A raiz é um array
+                auto& allocator = cycleMovesetDoc.GetAllocator();
 
-            // Cria um único objeto de Perfil para o Player
-            rapidjson::Value profileObj(rapidjson::kObjectType);
-            profileObj.AddMember("Type", "Player", allocator);
-            profileObj.AddMember("Name", "Player", allocator);
-            profileObj.AddMember("FormID", "00000007", allocator);
-            profileObj.AddMember("Plugin", "Skyrim.esm", allocator);
-            profileObj.AddMember("Identifier", "Player", allocator);
+                // 1. Cria o objeto de Perfil para o Player
+                rapidjson::Value profileObj(rapidjson::kObjectType);
+                profileObj.AddMember("Type", "Player", allocator);
+                profileObj.AddMember("Name", "Player", allocator);
+                profileObj.AddMember("FormID", "00000007", allocator);
+                profileObj.AddMember("Plugin", "Skyrim.esm", allocator);
+                profileObj.AddMember("Identifier", "Player", allocator);
 
-            rapidjson::Value menuArray(rapidjson::kArrayType);
+                rapidjson::Value menuArray(rapidjson::kArrayType);
 
-            // A lógica interna para agrupar e criar os objetos de categoria, stance e animação
-            // permanece a mesma, pois já estava correta.
-            std::map<std::string, std::vector<const FileSaveConfig*>> configsByCategory;
-            for (const auto& config : data.configs) {
-                configsByCategory[config.category->name].push_back(&config);
-            }
-
-            for (const auto& catPair : configsByCategory) {
-                rapidjson::Value categoryObj(rapidjson::kObjectType);
-                categoryObj.AddMember("Category", rapidjson::Value(catPair.first.c_str(), allocator), allocator);
-                rapidjson::Value stancesArray(rapidjson::kArrayType);
-
-                std::map<int, std::vector<const FileSaveConfig*>> configsByStance;
-                for (const auto* configPtr : catPair.second) {
-                    configsByStance[configPtr->instance_index].push_back(configPtr);
+                // 2. Agrupa as configurações por Categoria
+                std::map<std::string, std::vector<const FileSaveConfig*>> configsByCategory;
+                for (const auto& config : data.configs) {
+                    configsByCategory[config.category->name].push_back(&config);
                 }
 
-                for (const auto& stancePair : configsByStance) {
-                    rapidjson::Value newStanceObj(rapidjson::kObjectType);
-                    newStanceObj.AddMember("index", stancePair.first, allocator);
-                    newStanceObj.AddMember("type", "moveset", allocator);
-                    newStanceObj.AddMember("name", rapidjson::Value(movesetName.c_str(), allocator), allocator);
-                    newStanceObj.AddMember("level", 0, allocator);  // Adiciona valores padrão
-                    newStanceObj.AddMember("hp", 100, allocator);   // Adiciona valores padrão
+                // 3. Itera sobre cada Categoria
+                for (const auto& catPair : configsByCategory) {
+                    rapidjson::Value categoryObj(rapidjson::kObjectType);
+                    categoryObj.AddMember("Category", rapidjson::Value(catPair.first.c_str(), allocator), allocator);
+                    rapidjson::Value stancesArray(rapidjson::kArrayType);
 
-                    rapidjson::Value animationsArray(rapidjson::kArrayType);
-                    for (const auto* configPtr : stancePair.second) {
-                        rapidjson::Value animObj(rapidjson::kObjectType);
-                        animObj.AddMember("index", configPtr->order_in_playlist, allocator);
-                        animObj.AddMember("sourceModName", rapidjson::Value(movesetName.c_str(), allocator), allocator);
-                        animObj.AddMember("sourceSubName", rapidjson::Value(subName.c_str(), allocator), allocator);
-                        animObj.AddMember("sourceConfigPath",
-                                          rapidjson::Value(subMovesetPath.string().c_str(), allocator), allocator);
-                        animObj.AddMember("pFront", configPtr->pFront, allocator);
-                        animObj.AddMember("pBack", configPtr->pBack, allocator);
-                        animObj.AddMember("pLeft", configPtr->pLeft, allocator);
-                        animObj.AddMember("pRight", configPtr->pRight, allocator);
-                        animObj.AddMember("pFrontRight", configPtr->pFrontRight, allocator);
-                        animObj.AddMember("pFrontLeft", configPtr->pFrontLeft, allocator);
-                        animObj.AddMember("pBackRight", configPtr->pBackRight, allocator);
-                        animObj.AddMember("pBackLeft", configPtr->pBackLeft, allocator);
-                        animObj.AddMember("pRandom", configPtr->pRandom, allocator);
-                        animObj.AddMember("pDodge", configPtr->pDodge, allocator);
-                        animationsArray.PushBack(animObj, allocator);
+                    // 4. Agrupa as configurações por Stance
+                    std::map<int, std::vector<const FileSaveConfig*>> configsByStance;
+                    for (const auto* configPtr : catPair.second) {
+                        configsByStance[configPtr->instance_index].push_back(configPtr);
                     }
-                    newStanceObj.AddMember("animations", animationsArray, allocator);
-                    stancesArray.PushBack(newStanceObj, allocator);
+
+                    // 5. Itera sobre cada Stance
+                    for (const auto& stancePair : configsByStance) {
+                        rapidjson::Value newStanceObj(rapidjson::kObjectType);
+                        newStanceObj.AddMember("index", stancePair.first, allocator);
+                        newStanceObj.AddMember("type", "moveset", allocator);
+                        newStanceObj.AddMember("name", rapidjson::Value(movesetName.c_str(), allocator), allocator);
+                        newStanceObj.AddMember("level", 0, allocator);
+                        newStanceObj.AddMember("hp", 100, allocator);
+
+                        rapidjson::Value animationsArray(rapidjson::kArrayType);
+
+                        // 6. Adiciona cada animação (sub-moveset) à Stance
+                        for (const auto* configPtr : stancePair.second) {
+                            rapidjson::Value animObj(rapidjson::kObjectType);
+                            animObj.AddMember("index", configPtr->order_in_playlist, allocator);
+                            animObj.AddMember("sourceModName", rapidjson::Value(movesetName.c_str(), allocator),
+                                              allocator);
+                            animObj.AddMember("sourceSubName", rapidjson::Value(subName.c_str(), allocator), allocator);
+
+                            // O caminho do config.json que a função Load irá procurar
+                            std::string configPathStr = (subMovesetPath / "config.json").string();
+                            animObj.AddMember("sourceConfigPath", rapidjson::Value(configPathStr.c_str(), allocator),
+                                              allocator);
+
+                            animObj.AddMember("pFront", configPtr->pFront, allocator);
+                            animObj.AddMember("pBack", configPtr->pBack, allocator);
+                            animObj.AddMember("pLeft", configPtr->pLeft, allocator);
+                            animObj.AddMember("pRight", configPtr->pRight, allocator);
+                            animObj.AddMember("pFrontRight", configPtr->pFrontRight, allocator);
+                            animObj.AddMember("pFrontLeft", configPtr->pFrontLeft, allocator);
+                            animObj.AddMember("pBackRight", configPtr->pBackRight, allocator);
+                            animObj.AddMember("pBackLeft", configPtr->pBackLeft, allocator);
+                            animObj.AddMember("pRandom", configPtr->pRandom, allocator);
+                            animObj.AddMember("pDodge", configPtr->pDodge, allocator);
+                            animationsArray.PushBack(animObj, allocator);
+                        }
+                        newStanceObj.AddMember("animations", animationsArray, allocator);
+                        stancesArray.PushBack(newStanceObj, allocator);
+                    }
+                    categoryObj.AddMember("stances", stancesArray, allocator);
+                    menuArray.PushBack(categoryObj, allocator);
                 }
-                categoryObj.AddMember("stances", stancesArray, allocator);
-                menuArray.PushBack(categoryObj, allocator);
+
+                profileObj.AddMember("Menu", menuArray, allocator);
+                cycleMovesetDoc.PushBack(profileObj, allocator);
+
+                // 7. Salva o arquivo final
+                std::ofstream outFile(subMovesetPath / "CycleMoveset.json");
+                rapidjson::StringBuffer buffer;
+                rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
+                cycleMovesetDoc.Accept(writer);
+                outFile << buffer.GetString();
             }
-
-            profileObj.AddMember("Menu", menuArray, allocator);
-            cycleMovesetDoc.PushBack(profileObj, allocator);
-
-            std::ofstream outFile(subMovesetPath / "CycleMoveset.json");
-            rapidjson::StringBuffer buffer;
-            rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
-            cycleMovesetDoc.Accept(writer);
-            outFile << buffer.GetString();
-            // A lógica para gerar o CycleMoveset.json (se você a mantiver) permanece a mesma,
-            // pois ela já é baseada nas FileSaveConfig, que foram corretamente agrupadas.
+            
         }
 
         _newMovesetCategorySelection.clear();
@@ -3866,7 +3892,6 @@ void AnimationManager::SaveCycleMovesets() {
     
 
 void AnimationManager::DrawNpcSelectionModal() {
-        // A flag que abre este modal agora é controlada pelo pop-up de seleção de tipo
         if (_isNpcSelectionModalOpen) {
             ImGui::OpenPopup("Seletor Universal");
         }
@@ -3877,7 +3902,14 @@ void AnimationManager::DrawNpcSelectionModal() {
         ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * 0.7f, viewport->Size.y * 0.7f));
 
         if (ImGui::BeginPopupModal("Seletor Universal", &_isNpcSelectionModalOpen, ImGuiWindowFlags_None)) {
-            // --- Título Dinâmico ---
+            // --- LOG 1: Verificar se as listas de dados principais estão carregadas ---
+            if (ImGui::IsWindowAppearing()) {  // Loga apenas na primeira vez que o modal abre
+                SKSE::log::info(
+                    "[NpcSelectionModal] Abrindo modal. Tamanhos das listas: NPCs={}, Factions={}, Keywords={}, "
+                    "Races={}",
+                    _fullNpcList.size(), _allFactions.size(), _allKeywords.size(), _allRaces.size());
+            }
+
             const char* title = "Selecione o Item";
             switch (_ruleTypeToCreate) {
                 case RuleType::UniqueNPC:
@@ -3906,7 +3938,6 @@ void AnimationManager::DrawNpcSelectionModal() {
             ImGui::PushItemWidth(200);
             ImGui::Combo("Plugin", &_selectedPluginIndex, pluginNamesCStr.data(), pluginNamesCStr.size());
             ImGui::PopItemWidth();
-
             ImGui::Separator();
 
             if (ImGui::BeginTable("SelectionTable", 4,
@@ -3923,29 +3954,53 @@ void AnimationManager::DrawNpcSelectionModal() {
                                                  ? ""
                                                  : _pluginList[_selectedPluginIndex];
 
+                // --- LOG 2: Verificar os filtros atuais ---
+                SKSE::log::info("[NpcSelectionModal] Filtros Ativos -> Texto: '{}', Plugin: '{}' (índice {})",
+                                filterTextLower, selectedPlugin, _selectedPluginIndex);
+
                 switch (_ruleTypeToCreate) {
                     case RuleType::UniqueNPC: {
-                        SKSE::log::info("[DrawNpcSelectionModal] Entrando no loop para desenhar NPCs...");  // LOG #1
-                        std::string selectedPlugin = (_pluginList.empty() || _selectedPluginIndex >= _pluginList.size())
-                                                         ? ""
-                                                         : _pluginList[_selectedPluginIndex];
-                        for (const auto& npc : _fullNpcList) {
-                            // LOG #2: Informa qual NPC está sendo processado
-                            SKSE::log::info("[DrawNpcSelectionModal] Processando NPC: {} ({:08X})", npc.name,
-                                            npc.formID);
-
+                        std::vector<int> filtered_indices;
+                        filtered_indices.reserve(_fullNpcList.size());
+                        for (int i = 0; i < _fullNpcList.size(); ++i) {
+                            const auto& npc = _fullNpcList[i];
                             if (_selectedPluginIndex != 0 && npc.pluginName != selectedPlugin) continue;
-
                             std::string nameLower = npc.name;
                             std::string editorIdLower = npc.editorID;
                             std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
                             std::transform(editorIdLower.begin(), editorIdLower.end(), editorIdLower.begin(),
                                            ::tolower);
+                            if (filterTextLower.empty() || nameLower.find(filterTextLower) != std::string::npos ||
+                                editorIdLower.find(filterTextLower) != std::string::npos) {
+                                filtered_indices.push_back(i);
+                            }
+                        }
 
-                            if (!filterTextLower.empty() && nameLower.find(filterTextLower) == std::string::npos &&
-                                editorIdLower.find(filterTextLower) == std::string::npos)
-                                continue;
+                        // ====================== INÍCIO DO CLIPPER MANUAL ======================
+                        // 1. Pegamos a altura de uma única linha da tabela.
+                        const float item_height = ImGui::GetTextLineHeightWithSpacing();
 
+                        // 2. Pegamos a posição atual do scroll e a altura da área visível.
+                        const float scroll_y = ImGui::GetScrollY();
+                        ImVec2 content_avail;
+                        ImGui::GetContentRegionAvail(&content_avail);
+                        const float content_height = content_avail.y;
+
+                        // 3. Calculamos o índice do primeiro e último item a serem renderizados.
+                        int display_start = static_cast<int>(scroll_y / item_height);
+                        int display_end = display_start + static_cast<int>(ceil(content_height / item_height)) + 1;
+
+                        // 4. Garantimos que os índices não saiam dos limites da nossa lista.
+                        display_start = std::max(0, display_start);
+                        display_end = std::min(static_cast<int>(filtered_indices.size()), display_end);
+
+                        // Log para verificar nossos cálculos manuais
+
+
+                        // Adiciona espaço no topo para simular o scroll
+                        ImGui::Dummy(ImVec2(0.0f, display_start * item_height));
+                        for (int i = display_start; i < display_end; i++) {
+                            const auto& npc = _fullNpcList[filtered_indices[i]];
                             ImGui::TableNextRow();
                             ImGui::TableNextColumn();
                             ImGui::Text("%s", npc.name.c_str());
@@ -3971,27 +4026,54 @@ void AnimationManager::DrawNpcSelectionModal() {
                             }
                             ImGui::PopID();
                         }
-                        SKSE::log::info("[DrawNpcSelectionModal] Fim do loop de NPCs.");  // LOG #3
+                        ImGui::Dummy(ImVec2(0.0f, (filtered_indices.size() - display_end) * item_height));
                         break;
                     }
                     case RuleType::Faction:
                     case RuleType::Keyword:
                     case RuleType::Race: {
-                        // Lógica genérica para Faction, Keyword e Race
-                        auto draw_list = [&](auto& info_list) {
-                            for (const auto& info : info_list) {
-                                // ADICIONADO FILTRO DE PLUGIN
+                        auto draw_list_with_manual_clipper = [&](auto& info_list) {
+                            // PASSO 1: Filtragem
+                            std::vector<int> filtered_indices;
+                            filtered_indices.reserve(info_list.size());
+                            for (int i = 0; i < info_list.size(); ++i) {
+                                const auto& info = info_list[i];
                                 if (_selectedPluginIndex != 0 && info.pluginName != selectedPlugin) continue;
 
-                                std::string editorIdLower = info.editorID;
-                                std::transform(editorIdLower.begin(), editorIdLower.end(), editorIdLower.begin(),
+                                std::string name_lower;
+                                if constexpr (std::is_same_v<std::decay_t<decltype(info)>, RaceInfo>) {
+                                    name_lower = info.fullName;
+                                } else {
+                                    name_lower = info.editorID;
+                                }
+                                std::string editorid_lower = info.editorID;
+                                std::transform(name_lower.begin(), name_lower.end(), name_lower.begin(), ::tolower);
+                                std::transform(editorid_lower.begin(), editorid_lower.end(), editorid_lower.begin(),
                                                ::tolower);
-                                if (!filterTextLower.empty() &&
-                                    editorIdLower.find(filterTextLower) == std::string::npos)
-                                    continue;
 
+                                if (filterTextLower.empty() || name_lower.find(filterTextLower) != std::string::npos ||
+                                    editorid_lower.find(filterTextLower) != std::string::npos) {
+                                    filtered_indices.push_back(i);
+                                }
+                            }
+
+                            // PASSO 2: Clipper Manual
+                            const float item_height = ImGui::GetTextLineHeightWithSpacing();
+                            const float scroll_y = ImGui::GetScrollY();
+                            ImVec2 content_avail;
+                            ImGui::GetContentRegionAvail(&content_avail);
+                            const float content_height = content_avail.y;
+                            int display_start = static_cast<int>(scroll_y / item_height);
+                            int display_end = display_start + static_cast<int>(ceil(content_height / item_height)) + 1;
+                            display_start = std::max(0, display_start);
+                            display_end = std::min(static_cast<int>(filtered_indices.size()), display_end);
+
+                            ImGui::Dummy(ImVec2(0.0f, display_start * item_height));
+
+                            // PASSO 3: Renderização
+                            for (int i = display_start; i < display_end; i++) {
+                                const auto& info = info_list[filtered_indices[i]];
                                 ImGui::TableNextRow();
-                                // Colunas para Race são um pouco diferentes
                                 if constexpr (std::is_same_v<std::decay_t<decltype(info)>, RaceInfo>) {
                                     ImGui::TableNextColumn();
                                     ImGui::Text("%s", info.fullName.c_str());
@@ -4002,7 +4084,7 @@ void AnimationManager::DrawNpcSelectionModal() {
                                 ImGui::TableNextColumn();
                                 ImGui::Text("%s", info.editorID.c_str());
                                 ImGui::TableNextColumn();
-                                ImGui::Text("%s", info.pluginName.c_str());  // Mostra o plugin
+                                ImGui::Text("%s", info.pluginName.c_str());
                                 ImGui::TableNextColumn();
                                 ImGui::PushID(info.formID);
                                 if (ImGui::Button("Selecionar")) {
@@ -4010,7 +4092,7 @@ void AnimationManager::DrawNpcSelectionModal() {
                                     newRule.type = _ruleTypeToCreate;
                                     newRule.displayName = info.editorID;
                                     newRule.identifier = info.editorID;
-                                    newRule.pluginName = info.pluginName;  // Salva o plugin na regra
+                                    newRule.pluginName = info.pluginName;
                                     newRule.formID = info.formID;
                                     newRule.categories = _categories;
                                     for (auto& pair : newRule.categories) {
@@ -4021,14 +4103,15 @@ void AnimationManager::DrawNpcSelectionModal() {
                                 }
                                 ImGui::PopID();
                             }
+                            ImGui::Dummy(ImVec2(0.0f, (filtered_indices.size() - display_end) * item_height));
                         };
 
                         if (_ruleTypeToCreate == RuleType::Faction)
-                            draw_list(_allFactions);
+                            draw_list_with_manual_clipper(_allFactions);
                         else if (_ruleTypeToCreate == RuleType::Keyword)
-                            draw_list(_allKeywords);
+                            draw_list_with_manual_clipper(_allKeywords);
                         else if (_ruleTypeToCreate == RuleType::Race)
-                            draw_list(_allRaces);
+                            draw_list_with_manual_clipper(_allRaces);
 
                         break;
                     }
@@ -4036,10 +4119,10 @@ void AnimationManager::DrawNpcSelectionModal() {
                 ImGui::EndTable();
             }
 
-            ImGui::Separator();
+            /*ImGui::Separator();
             if (ImGui::Button("Fechar", ImVec2(120, 0))) {
                 _isNpcSelectionModalOpen = false;
-            }
+            }*/
             ImGui::EndPopup();
         }
     }
@@ -4159,10 +4242,22 @@ void AnimationManager::LoadGameDataForNpcRules() {
                                                   RE::FormID formID, rapidjson::Document::AllocatorType& allocator) {
         rapidjson::Value condition(rapidjson::kObjectType);
         condition.AddMember("condition", "HasKeyword", allocator);
-        rapidjson::Value params(rapidjson::kObjectType);
-        params.AddMember("pluginName", rapidjson::Value(plugin.c_str(), allocator), allocator);
-        params.AddMember("formID", rapidjson::Value(FormatFormIDForOAR(formID).c_str(), allocator), allocator);
-        condition.AddMember("Keyword", params, allocator);
+        condition.AddMember("requiredVersion", "1.0.0.0", allocator);
+
+        // Objeto principal que será o valor da chave "Keyword"
+        rapidjson::Value keywordObj(rapidjson::kObjectType);
+
+        // Objeto interno "form"
+        rapidjson::Value formObj(rapidjson::kObjectType);
+        formObj.AddMember("pluginName", rapidjson::Value(plugin.c_str(), allocator), allocator);
+        formObj.AddMember("formID", rapidjson::Value(FormatFormIDForOAR(formID).c_str(), allocator), allocator);
+
+        // Adiciona o objeto "form" dentro do objeto "Keyword"
+        keywordObj.AddMember("form", formObj, allocator);
+
+        // Adiciona o objeto "Keyword" completo à condição principal
+        condition.AddMember("Keyword", keywordObj, allocator);
+
         conditionsArray.PushBack(condition, allocator);
     }
 
