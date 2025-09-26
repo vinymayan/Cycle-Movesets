@@ -11,13 +11,15 @@ public:
     // A função que processa os eventos de input do jogo
     virtual RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* a_event,
                                                   RE::BSTEventSource<RE::InputEvent*>* a_eventSource) override;
+    static int GetDirectionalState() { return directionalState; };
+    
 
 protected:
 
 private:
     // Função para calcular a direção com base nas teclas pressionadas
     void UpdateDirectionalState();
-
+    static inline int directionalState = 0;
     // Variáveis para rastrear o estado de cada tecla de movimento
     bool w_pressed = false;
     bool a_pressed = false;

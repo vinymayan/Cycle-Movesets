@@ -17,16 +17,23 @@ namespace GlobalControl {
     // Ponteiro para a variável global, será preenchido quando o jogo carregar
     //inline RE::TESGlobal* g_targetGlobal = nullptr;
 
-    inline float g_currentStance = 0.0f;
-    inline float g_currentMoveset = 0.0f;
-
+    inline int g_currentStance = 0;
+    inline int g_currentMoveset = 0;
+    extern int g_directionalState; 
     // ID do nosso plugin com a API SkyPrompt
     inline SkyPromptAPI::ClientID g_clientID = 0;
     inline bool g_isWeaponDrawn = false;
     inline bool Cycleopen = false;
+    inline bool MovesetChangesOpen = false;
+    inline bool StanceChangesOpen = false;
+    
   
-    inline std::string StanceText = "Stance Menu";
-    inline std::string MovesetText = "Moveset Menu";
+    inline std::string StanceText = "Stances";
+    inline std::string MovesetText = "Movesets";
+    inline std::string StanceNextText = "Next";
+    inline std::string StanceBackText = "Back";
+    inline std::string MovesetNextText = "Next";
+    inline std::string MovesetBackText = "Back";
     inline std::vector<std::pair<RE::INPUT_DEVICE, SkyPromptAPI::ButtonID>> Stances_menu = {
         {RE::INPUT_DEVICE::kKeyboard, Settings::hotkey_principal_k},
         {RE::INPUT_DEVICE::kGamepad, Settings::hotkey_principal_g}
@@ -44,22 +51,27 @@ namespace GlobalControl {
         {RE::INPUT_DEVICE::kKeyboard, Settings::hotkey_quarta_k},
         {RE::INPUT_DEVICE::kGamepad, Settings::hotkey_quarta_g}
     };
+    const std::pair<RE::INPUT_DEVICE, SkyPromptAPI::ButtonID> skyrim_key = {RE::INPUT_DEVICE::kKeyboard, 286}; 
     
 
 
 
-    // ActionID 0: proxima
-    inline SkyPromptAPI::Prompt prompt_Increment("Next", 3, 0, SkyPromptAPI::PromptType::kSinglePress, 20,
-                                                 Next_key);
-    //// ActionID 1: Resetar
-    //inline SkyPromptAPI::Prompt prompt_Reset("Toggle Menu", 2, 0, SkyPromptAPI::PromptType::kSinglePress, 20,
-    //                                        std::span(&Reset_key, 1));
-    // ActionID 2: anterior
-    inline SkyPromptAPI::Prompt prompt_Decrement("Back", 2, 0, SkyPromptAPI::PromptType::kSinglePress, 20,
-                                                 Back_key);
     inline SkyPromptAPI::Prompt menu_stance(StanceText, 0, 0, SkyPromptAPI::PromptType::kHoldAndKeep, 20, Stances_menu);
-    inline SkyPromptAPI::Prompt menu_moveset(MovesetText, 1, 0, SkyPromptAPI::PromptType::kHoldAndKeep, 20,
-                                             Moveset_menu);
+    inline SkyPromptAPI::Prompt stance_actual(StanceText, 0, 0, SkyPromptAPI::PromptType::kSinglePress, 20,
+                                              Stances_menu, 0xFFFFFFFF, 0.999f);
+
+    inline SkyPromptAPI::Prompt stance_next(StanceNextText, 3, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Next_key);
+ 
+    inline SkyPromptAPI::Prompt stance_back(StanceBackText, 2, 0, SkyPromptAPI::PromptType::kSinglePress, 20, Back_key);
+    
+    inline SkyPromptAPI::Prompt menu_moveset(MovesetText, 1, 0, SkyPromptAPI::PromptType::kHoldAndKeep, 20,Moveset_menu);
+    inline SkyPromptAPI::Prompt moveset_actual(MovesetText, 1, 0, SkyPromptAPI::PromptType::kSinglePress, 20,
+                                               Moveset_menu, 0xFFFFFFFF, 0.999f);
+    inline SkyPromptAPI::Prompt moveset_next(MovesetNextText, 3, 0, SkyPromptAPI::PromptType::kSinglePress, 20,
+                                             Next_key);
+
+    inline SkyPromptAPI::Prompt moveset_back(MovesetBackText, 2, 0, SkyPromptAPI::PromptType::kSinglePress, 20,
+                                             Back_key);
 
     
     // A definimos como 'inline' aqui mesmo para simplificar e evitar problemas de linker.
@@ -88,13 +100,15 @@ namespace GlobalControl {
         // Função chamada quando um evento (ex: pressionar tecla) ocorre
         void ProcessEvent(SkyPromptAPI::PromptEvent event) const override;
         mutable bool except = false;
+        void UpdatePrompts() { prompts[0] = menu_stance; }
+
     private:
         // Um array para guardar todos os nossos prompts
         std::array<SkyPromptAPI::Prompt, 1> prompts = {menu_stance};
         
     };
 
-        class StancesChangesSink final : public SkyPromptAPI::PromptSink,
+    class StancesChangesSink final : public SkyPromptAPI::PromptSink,
                                      public clib_util::singleton::ISingleton<StancesChangesSink> {
 
     public:
@@ -104,9 +118,14 @@ namespace GlobalControl {
         // Função chamada quando um evento (ex: pressionar tecla) ocorre
         void ProcessEvent(SkyPromptAPI::PromptEvent event) const override;
         mutable bool except = false;
+        void UpdatePrompts() {
+            prompts[0] = stance_actual;
+            prompts[1] = stance_next;
+            prompts[2] = stance_back;
+        }
     private:
         // Um array para guardar todos os nossos prompts
-        std::array<SkyPromptAPI::Prompt, 2> prompts = {prompt_Increment, prompt_Decrement};
+        std::array<SkyPromptAPI::Prompt, 3> prompts = {stance_actual,stance_next, stance_back};
     };
 
             // A classe Sink processa os eventos da API
@@ -118,6 +137,7 @@ namespace GlobalControl {
         // Função chamada quando um evento (ex: pressionar tecla) ocorre
         void ProcessEvent(SkyPromptAPI::PromptEvent event) const override;
         mutable bool except = false;
+        void UpdatePrompts() { prompts[0] = menu_moveset; }
     private:
         // Um array para guardar todos os nossos prompts
         std::array<SkyPromptAPI::Prompt, 1> prompts = {menu_moveset};
@@ -132,9 +152,14 @@ namespace GlobalControl {
         // Função chamada quando um evento (ex: pressionar tecla) ocorre
         void ProcessEvent(SkyPromptAPI::PromptEvent event) const override;
         mutable bool except = false;
+        void UpdatePrompts() {
+            prompts[0] = moveset_actual;
+            prompts[1] = moveset_next;
+            prompts[2] = moveset_back;
+        }
     private:
         // Um array para guardar todos os nossos prompts
-        std::array<SkyPromptAPI::Prompt, 2> prompts = {prompt_Increment, prompt_Decrement};
+        std::array<SkyPromptAPI::Prompt, 3> prompts = {moveset_actual,moveset_next, moveset_back};
     };
 
     // <-- NOVO: Classe para ouvir eventos de sacar/guardar arma -->
@@ -231,6 +256,8 @@ namespace GlobalControl {
         static void RegisterSink(RE::Actor* a_actor);
         static void UnregisterSink(RE::Actor* a_actor);
 
+        static void RegisterSinksForExistingCombatants();
+
     private:
         // Instância compartilhada do nosso processador de lógica
         inline static NpcCycleSink g_npcSink;
@@ -257,6 +284,8 @@ namespace GlobalControl {
     inline bool IsThirdPerson();
 
     void NPCrandomNumber(RE::Actor* targetActor, const std::string& eventSource);
+
+    void UpdateSkyPromptTexts();
 
 
 }

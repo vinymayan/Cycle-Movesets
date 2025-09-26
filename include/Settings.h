@@ -12,6 +12,7 @@ struct SubAnimationDef {
     int attackCount = 0;       // Contagem de arquivos BFCO_Attack
     int powerAttackCount = 0;  // Contagem de arquivos BFCO_PowerAttack
     bool hasIdle = false;      // Presença de arquivos "idle"
+    bool hasAnimations = false;
 };
 struct AnimationModDef {
     std::string name;
@@ -43,6 +44,9 @@ struct ModInstance {
     size_t sourceModIndex;
     bool isSelected = true;
     std::vector<SubAnimationInstance> subAnimationInstances;
+    int level = 0;  // Condição de Nível Mínimo
+    int hp = 100;   // Condição de HP Máximo (em porcentagem)
+    int order = 0;
 };
 
 struct CategoryInstance {
@@ -52,10 +56,21 @@ struct CategoryInstance {
 struct WeaponCategory {
     std::string name;
     double equippedTypeValue;
+    double leftHandEquippedTypeValue = -1.0;
     int activeInstanceIndex = 0;
     bool isDualWield = false;
+    bool isShieldCategory = false;
     std::vector<std::string> keywords;
+    std::vector<std::string> leftHandKeywords;
     std::array<CategoryInstance, 4> instances;
+    // --- NOVO ---
+    // Armazena os nomes customizados das stances
+    std::array<std::string, 4> stanceNames;
+    // Buffer para edição no ImGui (evita problemas com std::string)
+    std::array<std::array<char, 64>, 4> stanceNameBuffers;
+
+    bool isCustom = false;
+    std::string baseCategoryName;
 };
 
 struct UserMoveset {

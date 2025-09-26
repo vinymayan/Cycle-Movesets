@@ -9,13 +9,14 @@
 
 constexpr const char* settings_path = "Data/SKSE/Plugins/CycleMovesets/CycleMoveset_Settings.json";
 
+
 void __stdcall UI::Render() {
 
-    AnimationManager::GetSingleton().DrawMainMenu();  // Chamando a função com o nome correto
+    AnimationManager::GetSingleton()->DrawMainMenu();  // Chamando a função com o nome correto
 }
 void __stdcall DrawNPCMenus() {
 
-    AnimationManager::GetSingleton().DrawNPCMenu();  // Chamando a função com o nome correto
+    AnimationManager::GetSingleton()->DrawNPCMenu();  // Chamando a função com o nome correto
 }
 
 namespace MyMenu {
@@ -41,7 +42,20 @@ namespace MyMenu {
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip(LOC("tooltip_auto_cycle"));
                 }
-
+                // --- NOVA CHECKBOX ADICIONADA AQUI ---
+                if (ImGui::Checkbox(
+                        "Random cycle",
+                        &Settings::RandomCycle)) {  // Supondo que você adicionará a tradução LOC("option_random_cycle")
+                    settings_changed = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(?)");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip(
+                        "When enabled, the automatic moveset cycle will be random instead of sequential. This mode has "
+                        "no minimum moveset requirement.");  // Supondo LOC("tooltip_random_cycle")
+                }
+                // --- FIM DA ADIÇÃO ---
                 ImGui::Spacing();
                 ImGui::SetNextItemWidth(200.0f);
                 // Opção e tooltip traduzidos
@@ -54,10 +68,17 @@ namespace MyMenu {
                     ImGui::SetTooltip(LOC("tooltip_cycle_timer"));
                 }
 
+                
+                if (ImGui::Checkbox("Show Menu",&Settings::ShowMenu)) { 
+                    settings_changed = true;
+                    if (!SkyPromptAPI::RequestTheme(GlobalControl::g_clientID,Settings::ShowMenu ? "Cycle Movesets" : "Cycle Movesets_hidden")) {
+                        logger::error("Falha ao solicitar o tema");
+                    }
+                    GlobalControl::UpdateSkyPromptTexts();
+                }
                 if (settings_changed) {
                     MyMenu::SaveSettings();
                 }
-
                 ImGui::EndTabItem();
             }
 
@@ -68,6 +89,15 @@ namespace MyMenu {
                 MyMenu::Keybind(LOC("keybind_moveset_menu"), &Settings::hotkey_segunda_k);
                 MyMenu::Keybind(LOC("keybind_back"), &Settings::hotkey_quarta_k);
                 MyMenu::Keybind(LOC("keybind_next"), &Settings::hotkey_terceira_k);
+                ImGui::Separator();
+                ImGui::Spacing();
+                ImGui::Text(LOC("movement_keys_header"));  // Crie um texto como "Teclas de Movimento"
+                ImGui::Spacing();
+
+                MyMenu::Keybind(LOC("keybind_forward"), &Settings::keyForward_k);
+                MyMenu::Keybind(LOC("keybind_left"), &Settings::keyLeft_k);
+                MyMenu::Keybind(LOC("keybind_back_key"), &Settings::keyBack_k);
+                MyMenu::Keybind(LOC("keybind_right"), &Settings::keyRight_k);
                 ImGui::EndTabItem();
             }
 
@@ -82,32 +112,32 @@ namespace MyMenu {
             }
 
             // --- NOVA ABA DE IDIOMA ---
-            if (ImGui::BeginTabItem(LOC("tab_language"))) {
-                ImGui::Spacing();
-                ImGui::Text(LOC("language_select_label"));
-                ImGui::SetNextItemWidth(200.0f);
+            //if (ImGui::BeginTabItem(LOC("tab_language"))) {
+            //    ImGui::Spacing();
+            //    ImGui::Text(LOC("language_select_label"));
+            //    ImGui::SetNextItemWidth(200.0f);
 
-                auto& locManager = LocalizationManager::GetSingleton();
-                const char* currentLang = locManager.GetCurrentLanguage().c_str();
+            //    auto& locManager = LocalizationManager::GetSingleton();
+            //    const char* currentLang = locManager.GetCurrentLanguage().c_str();
 
-                if (ImGui::BeginCombo("##LanguageCombo", currentLang)) {
-                    for (const auto& lang : locManager.GetAvailableLanguages()) {
-                        const bool is_selected = (currentLang == lang);
-                        if (ImGui::Selectable(lang.c_str(), is_selected)) {
-                            if (Settings::SelectedLanguage != lang) {
-                                Settings::SelectedLanguage = lang;
-                                locManager.LoadLanguage(lang);
-                                MyMenu::SaveSettings();  // Salva a nova seleção
-                            }
-                        }
-                        if (is_selected) {
-                            ImGui::SetItemDefaultFocus();
-                        }
-                    }
-                    ImGui::EndCombo();
-                }
-                ImGui::EndTabItem();
-            }
+            //    if (ImGui::BeginCombo("##LanguageCombo", currentLang)) {
+            //        for (const auto& lang : locManager.GetAvailableLanguages()) {
+            //            const bool is_selected = (currentLang == lang);
+            //            if (ImGui::Selectable(lang.c_str(), is_selected)) {
+            //                if (Settings::SelectedLanguage != lang) {
+            //                    Settings::SelectedLanguage = lang;
+            //                    locManager.LoadLanguage(lang);
+            //                    MyMenu::SaveSettings();  // Salva a nova seleção
+            //                }
+            //            }
+            //            if (is_selected) {
+            //                ImGui::SetItemDefaultFocus();
+            //            }
+            //        }
+            //        ImGui::EndCombo();
+            //    }
+            //    ImGui::EndTabItem();
+            //}
 
             ImGui::EndTabBar();
         }
@@ -124,7 +154,9 @@ namespace MyMenu {
 
         // Adiciona as configurações gerais
         doc.AddMember("CycleMoveset", Settings::CycleMoveset, allocator);
+        doc.AddMember("RandomCycle", Settings::RandomCycle, allocator);
         doc.AddMember("CycleTimer", Settings::CycleTimer, allocator);
+        doc.AddMember("ShowMenu", Settings::ShowMenu, allocator);
 
         // Cria o array de dispositivos
         rapidjson::Value devicesArray(rapidjson::kArrayType);
@@ -137,6 +169,10 @@ namespace MyMenu {
         keyboardKeys.AddMember("hotkey_segunda_k", Settings::hotkey_segunda_k, allocator);
         keyboardKeys.AddMember("hotkey_terceira_k", Settings::hotkey_terceira_k, allocator);
         keyboardKeys.AddMember("hotkey_quarta_k", Settings::hotkey_quarta_k, allocator);
+        keyboardKeys.AddMember("keyForward", Settings::keyForward_k, allocator);
+        keyboardKeys.AddMember("keyBack_k", Settings::keyBack_k, allocator);
+        keyboardKeys.AddMember("keyLeft", Settings::keyLeft_k, allocator);
+        keyboardKeys.AddMember("keyRight", Settings::keyRight_k, allocator);
         keyboardDevice.AddMember("Keys", keyboardKeys, allocator);
         devicesArray.PushBack(keyboardDevice, allocator);
 
@@ -208,8 +244,14 @@ namespace MyMenu {
         if (doc.HasMember("CycleMoveset") && doc["CycleMoveset"].IsBool()) {
             Settings::CycleMoveset = doc["CycleMoveset"].GetBool();
         }
+        if (doc.HasMember("RandomCycle") && doc["RandomCycle"].IsBool()) {  // <-- ADICIONADO
+            Settings::RandomCycle = doc["RandomCycle"].GetBool();
+        }
         if (doc.HasMember("CycleTimer") && doc["CycleTimer"].IsFloat()) {
             Settings::CycleTimer = doc["CycleTimer"].GetFloat();
+        }
+        if (doc.HasMember("ShowMenu") && doc["ShowMenu"].IsBool()) {
+            Settings::ShowMenu = doc["ShowMenu"].GetBool();
         }
 
         // Carrega as configurações dos dispositivos
@@ -229,6 +271,15 @@ namespace MyMenu {
                             Settings::hotkey_terceira_k = keys["hotkey_terceira_k"].GetInt();
                         if (keys.HasMember("hotkey_quarta_k") && keys["hotkey_quarta_k"].IsInt())
                             Settings::hotkey_quarta_k = keys["hotkey_quarta_k"].GetInt();
+                        if (keys.HasMember("keyForward") && keys["keyForward"].IsUint())
+                            Settings::keyForward_k =
+                            keys["keyForward"].GetUint();
+                        if (keys.HasMember("keyBack_k") && keys["keyBack_k"].IsUint())
+                            Settings::keyBack_k = keys["keyBack_k"].GetUint();
+                        if (keys.HasMember("keyLeft") && keys["keyLeft"].IsUint())
+                            Settings::keyLeft_k = keys["keyLeft"].GetUint();
+                        if (keys.HasMember("keyRight") && keys["keyRight"].IsUint())
+                            Settings::keyRight_k = keys["keyRight"].GetUint();
                     } else if (deviceName == "Controller") {
                         if (keys.HasMember("hotkey_principal_g") && keys["hotkey_principal_g"].IsInt())
                             Settings::hotkey_principal_g = keys["hotkey_principal_g"].GetInt();
@@ -245,8 +296,10 @@ namespace MyMenu {
 
         SKSE::log::info("Configurações carregadas com sucesso.");
         GlobalControl::UpdateRegisteredHotkeys();
+        Settings::SyncMovementKeys();
     }
 
+    
     // O CORPO INTEIRO DA FUNÇÃO QUE VOCÊ RECORTOU DE hooks.h VEM PARA CÁ
     void Keybind(const char* label, int* dx_key_ptr) {
         static std::map<const char*, bool> is_waiting_map;
@@ -286,6 +339,7 @@ namespace MyMenu {
                         is_waiting_for_key = false;
                         GlobalControl::UpdateRegisteredHotkeys();
                         MyMenu::SaveSettings();
+                        Settings::SyncMovementKeys();
                         break;
                     }
                 }
