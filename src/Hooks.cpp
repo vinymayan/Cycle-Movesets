@@ -3754,42 +3754,79 @@ void AnimationManager::LoadCycleMovesets() {
             const char* saveButtonText = LOC("save");
             if (ImGui::Button(saveButtonText, ImVec2(120, 0))) {
                 std::string newName = _newCategoryNameBuffer;
-                std::string originalName = isEditing ? _categoryToEditPtr->name : "";
+                std::string originalName = isEditing ? _originalCategoryName : "";  // Usamos o buffer do nome original
 
+                // Validação básica
                 if (newName.empty() || (newName != originalName && _categories.count(newName))) {
                     RE::DebugNotification("ERROR: Category name cannot be empty or already exists!");
                 } else {
-                    // Se o nome mudou, remove a categoria antiga para recriá-la
-                    if (isEditing && newName != originalName) {
-                        _categories.erase(originalName);
-                        _npcCategories.erase(originalName);
+                    bool nameChanged = isEditing && (newName != originalName);
+
+                    // --- ETAPA 1: SE O NOME MUDOU, RENOMEAR ARQUIVOS E MOVER OBJETOS ---
+                    if (nameChanged) {
+                        // --- 1.1: Renomear arquivos de configuração no disco ---
+                        try {
+                            const std::filesystem::path categoriesPath = "Data/SKSE/Plugins/CycleMovesets/Categories";
+                            const std::filesystem::path stancesPath = "Data/SKSE/Plugins/CycleMovesets/Stances";
+
+                            std::filesystem::path oldCatFile = categoriesPath / (originalName + ".json");
+                            std::filesystem::path newCatFile = categoriesPath / (newName + ".json");
+                            std::filesystem::path oldStanceFile = stancesPath / (originalName + ".json");
+                            std::filesystem::path newStanceFile = stancesPath / (newName + ".json");
+
+                            if (std::filesystem::exists(oldCatFile)) {
+                                std::filesystem::rename(oldCatFile, newCatFile);
+                            }
+                            if (std::filesystem::exists(oldStanceFile)) {
+                                std::filesystem::rename(oldStanceFile, newStanceFile);
+                            }
+                        } catch (const std::filesystem::filesystem_error& e) {
+                            SKSE::log::error("Falha ao renomear arquivos da categoria '{}': {}", originalName,
+                                             e.what());
+                        }
+
+                        // --- 1.2: Mover o objeto da categoria em memória (preserva movesets e stances) ---
+                        // Para _categories
+                        auto nodeHandle = _categories.extract(originalName);
+                        if (!nodeHandle.empty()) {
+                            nodeHandle.key() = newName;
+                            nodeHandle.mapped().name = newName;  // Atualiza o nome dentro do próprio objeto
+                            _categories.insert(std::move(nodeHandle));
+                        }
+                        // Para _npcCategories
+                        auto npcNodeHandle = _npcCategories.extract(originalName);
+                        if (!npcNodeHandle.empty()) {
+                            npcNodeHandle.key() = newName;
+                            npcNodeHandle.mapped().name = newName;
+                            _npcCategories.insert(std::move(npcNodeHandle));
+                        }
                     }
 
-                    WeaponCategory& catToUpdate = _categories[newName];  // Cria ou acessa a categoria
-                    catToUpdate.name = newName;
+                    // --- ETAPA 2: ATUALIZAR OS DADOS DA CATEGORIA (NOVA OU JÁ RENOMEADA) ---
+                    WeaponCategory& catToUpdate =
+                        _categories.at(newName);  // Acessa a categoria (agora com o nome correto)
                     catToUpdate.isCustom = true;
                     catToUpdate.isDualWield = _newCategoryIsDual;
                     catToUpdate.isShieldCategory = _newCategoryIsShield;
 
-                    // CORREÇÃO PONTO 1 & 2: Lógica de atribuição de dados
                     const WeaponCategory* baseCat = baseCategoryPtrs[_newCategoryBaseIndex];
                     catToUpdate.baseCategoryName = baseCat->name;
-                    catToUpdate.keywords = SplitKeywords(_newCategoryKeywordsBuffer);  // Sempre salva keywords
+                    catToUpdate.keywords = SplitKeywords(_newCategoryKeywordsBuffer);
 
                     if (catToUpdate.isShieldCategory) {
-                        catToUpdate.equippedTypeValue = baseCat->equippedTypeValue;  // Usa o tipo da arma selecionada
-                        catToUpdate.leftHandEquippedTypeValue = 11.0;                // Valor fixo para escudo
+                        catToUpdate.equippedTypeValue = baseCat->equippedTypeValue;
+                        catToUpdate.leftHandEquippedTypeValue = 11.0;  // Valor fixo para escudo
                     } else if (catToUpdate.isDualWield) {
                         const WeaponCategory* leftBaseCat = dualCategoryPtrs[_newCategoryLeftHandBaseIndex];
                         catToUpdate.equippedTypeValue = baseCat->equippedTypeValue;
                         catToUpdate.leftHandEquippedTypeValue = leftBaseCat->equippedTypeValue;
                         catToUpdate.leftHandKeywords = SplitKeywords(_newCategoryLeftHandKeywordsBuffer);
-                    } else {  // Categoria normal de uma mão
+                    } else {
                         catToUpdate.equippedTypeValue = baseCat->equippedTypeValue;
                         catToUpdate.leftHandEquippedTypeValue = baseCat->leftHandEquippedTypeValue;
                     }
 
-                    // Inicializa stances para a nova/editada categoria
+                    // Se for uma categoria totalmente nova, inicializa os nomes das stances
                     if (!isEditing) {
                         for (int i = 0; i < 4; ++i) {
                             std::string defaultName = std::format("Stance {}", i + 1);
@@ -3799,8 +3836,10 @@ void AnimationManager::LoadCycleMovesets() {
                         }
                     }
 
-                    _npcCategories[newName] = catToUpdate;  // Sincroniza com a lista de NPCs
-                    _categoryToEditPtr = nullptr;           // Reseta o ponteiro de edição
+                    // Sincroniza a cópia da categoria para a lista de NPCs
+                    _npcCategories[newName] = catToUpdate;
+
+                    _categoryToEditPtr = nullptr;
                     ImGui::CloseCurrentPopup();
                 }
             }

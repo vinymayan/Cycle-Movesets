@@ -20,7 +20,6 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
     bool umaTeclaDeMovimentoMudou = false;
 
     for (auto* event = *a_event; event; event = event->next) {
-
         RE::INPUT_DEVICE device = event->GetDevice();
         // Ignora movimentos do mouse para não trocar o dispositivo acidentalmente
         if (device != RE::INPUT_DEVICE::kMouse && device != RE::INPUT_DEVICE::kNone) {
@@ -58,15 +57,18 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
             const uint32_t scanCode = button->GetIDCode();
 
             // Lógica rigorosa de máquina de estados para cada tecla
-            if (scanCode == Settings::keyForward) {  // Antes era W_KEY
+            if (scanCode == Settings::keyForward) {
+                // Só mude para 'pressionado' se a tecla ESTIVER 'down' E nosso estado atual for 'solto'.
                 if (button->IsDown() && !w_pressed) {
                     w_pressed = true;
                     umaTeclaDeMovimentoMudou = true;
-                } else if (button->IsUp() && w_pressed) {
+                }
+                // Só mude para 'solto' se a tecla ESTIVER 'up' E nosso estado atual for 'pressionado'.
+                else if (button->IsUp() && w_pressed) {
                     w_pressed = false;
                     umaTeclaDeMovimentoMudou = true;
                 }
-            } else if (scanCode == Settings::keyLeft) {  // Antes era A_KEY
+            } else if (scanCode == Settings::keyLeft) {
                 if (button->IsDown() && !a_pressed) {
                     a_pressed = true;
                     umaTeclaDeMovimentoMudou = true;
@@ -74,7 +76,7 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
                     a_pressed = false;
                     umaTeclaDeMovimentoMudou = true;
                 }
-            } else if (scanCode == Settings::keyBack) {  // Antes era S_KEY
+            } else if (scanCode == Settings::keyBack) {
                 if (button->IsDown() && !s_pressed) {
                     s_pressed = true;
                     umaTeclaDeMovimentoMudou = true;
@@ -82,7 +84,7 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
                     s_pressed = false;
                     umaTeclaDeMovimentoMudou = true;
                 }
-            } else if (scanCode == Settings::keyRight) {  // Antes era D_KEY
+            } else if (scanCode == Settings::keyRight) {
                 if (button->IsDown() && !d_pressed) {
                     d_pressed = true;
                     umaTeclaDeMovimentoMudou = true;
@@ -645,7 +647,7 @@ RE::BSEventNotifyControl GlobalControl::AnimationEventHandler::ProcessEvent(
             g_comboState.isTimerRunning = false;
 
             // --- LOG DE DIAGNÓSTICO ---
-            SKSE::log::info("[UpdateHandler] TIMEOUT! Fim de combo.");
+            //SKSE::log::info("[UpdateHandler] TIMEOUT! Fim de combo.");
 
             if (Settings::CycleMoveset) {
                 SKSE::GetTaskInterface()->AddTask([]() { TriggerSmartRandomNumber("Fim de Combo (C++)"); });
@@ -826,7 +828,7 @@ void GlobalControl::NpcCombatTracker::RegisterSink(RE::Actor* a_actor) {
     if (g_trackedNPCs.find(a_actor->GetFormID()) == g_trackedNPCs.end()) {
         a_actor->AddAnimationGraphEventSink(&g_npcSink);
         g_trackedNPCs.insert(a_actor->GetFormID());
-        SKSE::log::info("[NpcCombatTracker] Começando a rastrear animações do ator {:08X}", a_actor->GetFormID());
+        //SKSE::log::info("[NpcCombatTracker] Começando a rastrear animações do ator {:08X}", a_actor->GetFormID());
     }
 }
 
@@ -837,7 +839,7 @@ void GlobalControl::NpcCombatTracker::UnregisterSink(RE::Actor* a_actor) {
     if (g_trackedNPCs.find(a_actor->GetFormID()) != g_trackedNPCs.end()) {
         a_actor->RemoveAnimationGraphEventSink(&g_npcSink);
         g_trackedNPCs.erase(a_actor->GetFormID());
-        SKSE::log::info("[NpcCombatTracker] Parando de rastrear animações do ator {:08X}", a_actor->GetFormID());
+        //SKSE::log::info("[NpcCombatTracker] Parando de rastrear animações do ator {:08X}", a_actor->GetFormID());
     }
 }
 

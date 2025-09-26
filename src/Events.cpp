@@ -112,32 +112,32 @@ namespace MyMenu {
             }
 
             // --- NOVA ABA DE IDIOMA ---
-            if (ImGui::BeginTabItem(LOC("tab_language"))) {
-                ImGui::Spacing();
-                ImGui::Text(LOC("language_select_label"));
-                ImGui::SetNextItemWidth(200.0f);
+            //if (ImGui::BeginTabItem(LOC("tab_language"))) {
+            //    ImGui::Spacing();
+            //    ImGui::Text(LOC("language_select_label"));
+            //    ImGui::SetNextItemWidth(200.0f);
 
-                auto& locManager = LocalizationManager::GetSingleton();
-                const char* currentLang = locManager.GetCurrentLanguage().c_str();
+            //    auto& locManager = LocalizationManager::GetSingleton();
+            //    const char* currentLang = locManager.GetCurrentLanguage().c_str();
 
-                if (ImGui::BeginCombo("##LanguageCombo", currentLang)) {
-                    for (const auto& lang : locManager.GetAvailableLanguages()) {
-                        const bool is_selected = (currentLang == lang);
-                        if (ImGui::Selectable(lang.c_str(), is_selected)) {
-                            if (Settings::SelectedLanguage != lang) {
-                                Settings::SelectedLanguage = lang;
-                                locManager.LoadLanguage(lang);
-                                MyMenu::SaveSettings();  // Salva a nova seleção
-                            }
-                        }
-                        if (is_selected) {
-                            ImGui::SetItemDefaultFocus();
-                        }
-                    }
-                    ImGui::EndCombo();
-                }
-                ImGui::EndTabItem();
-            }
+            //    if (ImGui::BeginCombo("##LanguageCombo", currentLang)) {
+            //        for (const auto& lang : locManager.GetAvailableLanguages()) {
+            //            const bool is_selected = (currentLang == lang);
+            //            if (ImGui::Selectable(lang.c_str(), is_selected)) {
+            //                if (Settings::SelectedLanguage != lang) {
+            //                    Settings::SelectedLanguage = lang;
+            //                    locManager.LoadLanguage(lang);
+            //                    MyMenu::SaveSettings();  // Salva a nova seleção
+            //                }
+            //            }
+            //            if (is_selected) {
+            //                ImGui::SetItemDefaultFocus();
+            //            }
+            //        }
+            //        ImGui::EndCombo();
+            //    }
+            //    ImGui::EndTabItem();
+            //}
 
             ImGui::EndTabBar();
         }
