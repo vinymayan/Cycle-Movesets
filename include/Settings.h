@@ -46,6 +46,7 @@ struct ModInstance {
     std::vector<SubAnimationInstance> subAnimationInstances;
     int level = 0;  // Condição de Nível Mínimo
     int hp = 100;   // Condição de HP Máximo (em porcentagem)
+    int order = 0;
 };
 
 struct CategoryInstance {

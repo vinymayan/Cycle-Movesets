@@ -12,6 +12,7 @@
 #include "OARAPI.h"
 #include "Serialization.h"
 #include "ClibUtil/editorID.hpp"
+#include "Hooks.h"
 
     // Função auxiliar para copiar um único arquivo com logs
     void CopySingleFile(const std::filesystem::path& sourceFile, const std::filesystem::path& destinationPath,
@@ -661,7 +662,7 @@
                                     ImGui::SameLine();
                                     //ImGui::Checkbox("Rnd", &subInst.pRandom);
                                     //ImGui::SameLine();
-                                    ImGui::Checkbox("Movement", &subInst.pDodge);
+                                    //ImGui::Checkbox("Movement", &subInst.pDodge);
                                     ImGui::Unindent();
 
                                     // Seção para gerenciar arquivos .hkx individuais
@@ -1062,13 +1063,13 @@ void AnimationManager::DrawNPCManager() {
         if (_ruleToEdit != nullptr) {
             // --- MODO DE EDIÇÃO: Mostra o editor para a regra selecionada ---
 
-            if (ImGui::Button("<-- Voltar para a Lista de Regras")) {
+            if (ImGui::Button("Back")) {
                 SKSE::log::info("[DrawNPCManager] Botão 'Voltar' clicado. Saindo do modo de edição.");
                 _ruleToEdit = nullptr;  // Define como nulo para voltar ao modo de lista
                 return;
             }
             ImGui::SameLine();
-            ImGui::TextDisabled(" | Editando a regra: ");
+            ImGui::TextDisabled(" | Editing rule: ");
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%s", _ruleToEdit->displayName.c_str());
             ImGui::Separator();
@@ -1077,7 +1078,7 @@ void AnimationManager::DrawNPCManager() {
             auto& categoriesToDraw = _ruleToEdit->categories;
 
             if (categoriesToDraw.empty()) {
-                ImGui::Text("Esta regra ainda não possui categorias. Crie-as no Gerenciador de Categorias.");
+                ImGui::Text("This rule doesnt have categories");
             }
 
             // Reutiliza a mesma TabBar e lógica de UI que você já tinha para NPCs
@@ -1116,35 +1117,35 @@ void AnimationManager::DrawNPCManager() {
                 SaveAllSettings();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Criar Nova Regra...")) {
+            if (ImGui::Button("Create new rule")) {
                 _isCreateRuleModalOpen = true;
                 ImGui::OpenPopup("Select Rule Type");
             }
             ImGui::Separator();
 
             ImGui::PushItemWidth(150);
-            const char* filterTypes[] = {"Todos", "NPC Único", "Keyword", "Facção", "Raça"};
-            ImGui::Combo("Filtrar por Tipo", &_ruleFilterType, filterTypes,
+            const char* filterTypes[] = {"All", "NPC", "Keyword", "Faction", "Race"};
+            ImGui::Combo("Filter by type", &_ruleFilterType, filterTypes,
                          sizeof(filterTypes) / sizeof(filterTypes[0]));
             ImGui::PopItemWidth();
 
             ImGui::SameLine();
-            ImGui::InputText("Pesquisar", _ruleFilterText, sizeof(_ruleFilterText));
+            ImGui::InputText("Search", _ruleFilterText, sizeof(_ruleFilterText));
             ImGui::Separator();
 
             if (ImGui::BeginTable("RulesTable", 4,
                                   ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
-                ImGui::TableSetupColumn("Tipo", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-                ImGui::TableSetupColumn("Nome / Identificador", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("Rule type", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableSetupColumn("Name / ID", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableSetupColumn("Plugin", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableSetupColumn("Ações", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+                ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 180.0f);
                 ImGui::TableHeadersRow();
                 // --- Linha Fixa para a Regra "NPCs (General)" ---
                 ImGui::TableNextRow();
 
                 // Coluna: Tipo
                 ImGui::TableNextColumn();
-                ImGui::TextDisabled("Geral");
+                ImGui::TextDisabled("General");
 
                 // Coluna: Nome
                 ImGui::TableNextColumn();
@@ -1153,12 +1154,12 @@ void AnimationManager::DrawNPCManager() {
 
                 // Coluna: Plugin
                 ImGui::TableNextColumn();
-                ImGui::Text("Sistema");
+                ImGui::Text("Plugin");
 
                 // Coluna: Ações
                 ImGui::TableNextColumn();
                 ImGui::PushID("##GeneralRule");
-                if (ImGui::Button("Editar")) {
+                if (ImGui::Button("Edit")) {
                     SKSE::log::info("[DrawNPCManager] Botão 'Editar' da Regra Geral clicado.");
                     _ruleToEdit = &_generalNpcRule;  // Aponta para a nossa variável de membro
                 }
@@ -1170,7 +1171,28 @@ void AnimationManager::DrawNPCManager() {
                 for (auto it = _npcRules.begin(); it != _npcRules.end();) {
                     auto& rule = *it;
                     //SKSE::log::info("[DrawNPCManager] Processando regra na lista: '{}'", rule.displayName); 
-                    if (_ruleFilterType != 0 && (int)rule.type + 1 != _ruleFilterType) {
+                    bool skipRule = false;
+                    if (_ruleFilterType != 0) {  // Se não for "All"
+                        switch (_ruleFilterType) {
+                            case 1:  // "NPC"
+                                if (rule.type != RuleType::UniqueNPC) skipRule = true;
+                                break;
+                            case 2:  // "Keyword"
+                                if (rule.type != RuleType::Keyword) skipRule = true;
+                                break;
+                            case 3:  // "Faction"
+                                if (rule.type != RuleType::Faction) skipRule = true;
+                                break;
+                            case 4:  // "Race"
+                                if (rule.type != RuleType::Race) skipRule = true;
+                                break;
+                            default:
+                                // Caso algum outro valor apareça, não filtra nada
+                                break;
+                        }
+                    }
+
+                    if (skipRule) {
                         ++it;
                         continue;
                     }
@@ -1194,10 +1216,10 @@ void AnimationManager::DrawNPCManager() {
                             typeName = "Keyword";
                             break;
                         case RuleType::Faction:
-                            typeName = "Facção";
+                            typeName = "Faction";
                             break;
                         case RuleType::Race:
-                            typeName = "Raça";
+                            typeName = "Race";
                             break;
                     }
                     ImGui::Text(typeName);
@@ -1211,12 +1233,12 @@ void AnimationManager::DrawNPCManager() {
 
                     ImGui::TableNextColumn();
                     ImGui::PushID(&rule);
-                    if (ImGui::Button("Editar")) {
+                    if (ImGui::Button("Edit")) {
                         SKSE::log::info("[DrawNPCManager] Botão 'Editar' clicado para a regra: '{}'", rule.displayName);
                         _ruleToEdit = &rule;  // <-- A MÁGICA ACONTECE AQUI!
                     }
                     ImGui::SameLine();
-                    if (ImGui::Button("Excluir")) {
+                    if (ImGui::Button("Delete")) {
                         it = _npcRules.erase(it);
                     } else {
                         ++it;
@@ -1228,25 +1250,25 @@ void AnimationManager::DrawNPCManager() {
         }
         // --- NOVO POP-UP: Adicione este bloco de código no final da função ---
         if (ImGui::BeginPopupModal("Select Rule Type", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::Text("Qual tipo de regra você quer criar?");
+            ImGui::Text("Which rule type you want create?");
             ImGui::Separator();
 
             // Radio buttons para selecionar o tipo de regra
             // A variável _ruleTypeToCreate é a que adicionamos ao .h anteriormente
-            ImGui::RadioButton("NPC Único", reinterpret_cast<int*>(&_ruleTypeToCreate), (int)RuleType::UniqueNPC);
+            ImGui::RadioButton("NPC", reinterpret_cast<int*>(&_ruleTypeToCreate), (int)RuleType::UniqueNPC);
             ImGui::RadioButton("Keyword", reinterpret_cast<int*>(&_ruleTypeToCreate), (int)RuleType::Keyword);
-            ImGui::RadioButton("Facção", reinterpret_cast<int*>(&_ruleTypeToCreate), (int)RuleType::Faction);
-            ImGui::RadioButton("Raça", reinterpret_cast<int*>(&_ruleTypeToCreate), (int)RuleType::Race);
+            ImGui::RadioButton("Faction", reinterpret_cast<int*>(&_ruleTypeToCreate), (int)RuleType::Faction);
+            ImGui::RadioButton("Race", reinterpret_cast<int*>(&_ruleTypeToCreate), (int)RuleType::Race);
 
             ImGui::Separator();
 
-            if (ImGui::Button("Próximo", ImVec2(120, 0))) {
+            if (ImGui::Button("Next", ImVec2(120, 0))) {
                 // Quando o usuário clica em Próximo, nós ativamos o pop-up de seleção principal
                 _isNpcSelectionModalOpen = true;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Cancelar", ImVec2(120, 0))) {
+            if (ImGui::Button("Cancel", ImVec2(120, 0))) {
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
@@ -1262,14 +1284,24 @@ void AnimationManager::DrawNPCManager() {
             CategoryInstance& instance = category.instances[0];
 
             // --- PONTO 2: Lógica para calcular a ordem dos movesets ---
-            int playlistCounter = 1;
             std::map<const SubAnimationInstance*, int> playlistNumbers;
+            std::map<const SubAnimationInstance*, int> parentNumbersForChildren;
+            int currentPlaylistCounter = 1;
+            int lastValidParentNumber = 0;
+
             for (auto& modInst : instance.modInstances) {
-                if (modInst.isSelected) {
-                    for (auto& subInst : modInst.subAnimationInstances) {
-                        if (subInst.isSelected) {
-                            playlistNumbers[&subInst] = playlistCounter++;
-                        }
+                if (!modInst.isSelected) continue;
+                for (auto& subInst : modInst.subAnimationInstances) {
+                    if (!subInst.isSelected) continue;
+
+                    bool isParent = !(subInst.pRandom || subInst.pDodge);
+
+                    if (isParent) {
+                        lastValidParentNumber = currentPlaylistCounter;
+                        playlistNumbers[&subInst] = currentPlaylistCounter;
+                        currentPlaylistCounter++;
+                    } else {
+                        parentNumbersForChildren[&subInst] = lastValidParentNumber;
                     }
                 }
             }
@@ -1318,7 +1350,7 @@ void AnimationManager::DrawNPCManager() {
                         _instanceBeingEdited = &modInstance;
                     }
                     if (ImGui::IsItemHovered()) {
-                        ImGui::SetTooltip("Dê um duplo-clique para editar as condições.");
+                        ImGui::SetTooltip("Double-click to edit");
                     }
 
                 } else {                       // Se ESTA é a instância que estamos editando, mostre os widgets de input
@@ -1385,25 +1417,36 @@ void AnimationManager::DrawNPCManager() {
                         if (isChildDisabled) {
                             ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle()->Colors[ImGuiCol_TextDisabled]);
                         }
+                        ImGui::BeginGroup();
 
                         ImGui::Checkbox("##subselect", &subInstance.isSelected);
                         ImGui::SameLine();
 
-                        // --- PONTO 2: Exibindo a ordem do sub-moveset ---
+                        // Label que será a área de arrastar
                         std::string label;
-                        if (playlistNumbers.count(&subInstance)) {
-                            label = std::format("[{}] {}", playlistNumbers.at(&subInstance), originSubAnim.name);
+                        if (modInstance.isSelected && subInstance.isSelected) {
+                            if (playlistNumbers.count(&subInstance)) {
+                                label = std::format("[{}] {}", playlistNumbers.at(&subInstance), originSubAnim.name);
+                            } else if (parentNumbersForChildren.count(&subInstance)) {
+                                int parentNum = parentNumbersForChildren.at(&subInstance);
+                                label = std::format(" -> [{}] {}", parentNum, originSubAnim.name);
+                            } else {
+                                label = originSubAnim.name;  // Fallback
+                            }
                         } else {
-                            label = originSubAnim.name;
+                            label = originSubAnim.name;  // Mostra nome simples se desmarcado
                         }
 
-                        if (subInstance.sourceModIndex != modInstance.sourceModIndex) {
-                            label += std::format(" (from: {})", originMod.name);
-                        }
-                        ImGui::Selectable(label.c_str(), false);
-                        // --- FIM DA EXIBIÇÃO DA ORDEM ---
+                        // PONTO-CHAVE: Criamos um Selectable com tamanho definido.
+                        // Isso restringe a área de arrastar e soltar, deixando espaço para outros widgets.
+                        ImVec2 contentRegionAvail;
+                        ImGui::GetContentRegionAvail(&contentRegionAvail);
+                        ImVec2 selectableSize(contentRegionAvail.x * 0.7f,
+                                              ImGui::GetTextLineHeight());  // Ocupa 70% do espaço restante
 
-                        // --- PONTO 1: Adicionando Drag and Drop para os Sub-Movesets de NPC ---
+                        ImGui::Selectable(label.c_str(), false, 0, selectableSize);
+
+                        // Aplicamos o Drag & Drop APENAS ao Selectable que acabamos de criar.
                         if (ImGui::BeginDragDropSource()) {
                             ImGui::SetDragDropPayload("DND_SUB_INSTANCE_NPC", &sub_j, sizeof(size_t));
                             ImGui::Text("Mover %s", originSubAnim.name.c_str());
@@ -1419,13 +1462,20 @@ void AnimationManager::DrawNPCManager() {
                             }
                             ImGui::EndDragDropTarget();
                         }
-                        // --- FIM DO DRAG AND DROP ---
 
-                        // --- PONTO 3: Adicionando Checkboxes de Random e Dodge ---
-                        ImGui::SameLine();  // Alinha à direita
-                        ImGui::Checkbox("Rnd", &subInstance.pRandom);
-                        ImGui::SameLine();
+                        ImGui::EndGroup();  // Fim da Coluna 1
+
+                        // --- Coluna 2: Checkboxes de propriedades ---
+                        ImGui::SameLine();  // Move o cursor para a mesma linha, ao lado da Coluna 1
+
+                        ImGui::BeginGroup();  // Agrupa os checkboxes para garantir o alinhamento
+
+                        // Seus checkboxes agora estão fora da área de arrastar e são clicáveis.
+                        // ImGui::Checkbox("Rnd", &subInstance.pRandom);
+                        // ImGui::SameLine(); // Se tiver mais de um, use SameLine
                         ImGui::Checkbox("Movement", &subInstance.pDodge);
+
+                        ImGui::EndGroup();  // Fim da Coluna 2
                         // --- FIM DAS CHECKBOXES ---
 
                         if (isChildDisabled) {
@@ -1470,6 +1520,42 @@ void AnimationManager::SaveAllSettings() {
 
                 for (int i = 0; i < maxStances; ++i) {
                     const CategoryInstance& instance = category.instances[i];
+
+                    // ========================= INÍCIO DA CORREÇÃO =========================
+                    // ETAPA 1: PRÉ-PROCESSAMENTO
+                    // Mapeia o 'order_in_playlist' de um pai para um conjunto de suas direções de filhos.
+                    std::map<int, std::set<int>> childDirectionsByParentOrder;
+                    int tempPlaylistParentCounter = 1;
+                    int tempLastParentOrder = 0;
+
+                    for (const auto& modInst : instance.modInstances) {
+                        if (!modInst.isSelected) continue;
+                        for (const auto& subInst : modInst.subAnimationInstances) {
+                            if (!subInst.isSelected) continue;
+
+                            bool isParent = !(subInst.pFront || subInst.pBack || subInst.pLeft || subInst.pRight ||
+                                              subInst.pFrontRight || subInst.pFrontLeft || subInst.pBackRight ||
+                                              subInst.pBackLeft || subInst.pRandom || subInst.pDodge);
+
+                            if (isParent) {
+                                tempLastParentOrder = tempPlaylistParentCounter++;
+                            } else {
+                                if (tempLastParentOrder > 0) {  // Garante que há um pai para associar
+                                    if (subInst.pFront) childDirectionsByParentOrder[tempLastParentOrder].insert(1);
+                                    if (subInst.pFrontRight)
+                                        childDirectionsByParentOrder[tempLastParentOrder].insert(2);
+                                    if (subInst.pRight) childDirectionsByParentOrder[tempLastParentOrder].insert(3);
+                                    if (subInst.pBackRight) childDirectionsByParentOrder[tempLastParentOrder].insert(4);
+                                    if (subInst.pBack) childDirectionsByParentOrder[tempLastParentOrder].insert(5);
+                                    if (subInst.pBackLeft) childDirectionsByParentOrder[tempLastParentOrder].insert(6);
+                                    if (subInst.pLeft) childDirectionsByParentOrder[tempLastParentOrder].insert(7);
+                                    if (subInst.pFrontLeft) childDirectionsByParentOrder[tempLastParentOrder].insert(8);
+                                }
+                            }
+                        }
+                    }
+                    // =======================================================================
+
                     int playlistParentCounter = 1;
                     int lastParentOrder = 0;
 
@@ -1484,7 +1570,6 @@ void AnimationManager::SaveAllSettings() {
 
                             FileSaveConfig config;
 
-                            // Preenche os dados da REGRA
                             if (rule) {
                                 config.ruleType = rule->type;
                                 config.formID = rule->formID;
@@ -1497,13 +1582,8 @@ void AnimationManager::SaveAllSettings() {
                                 config.ruleIdentifier = "Player";
                             }
 
-                            // Preenche os dados do MOVESET
                             config.category = &category;
-                            // --- LÓGICA CORRIGIDA: Usa o índice correto da stance ---
-                            // Para NPCs, i será sempre 0, resultando em instance_index = 0.
-                            // Para Player, i será 0,1,2,3, resultando em instance_index = 1,2,3,4.
                             config.instance_index = isNpcRule ? 0 : i + 1;
-
                             config.pFront = subInst.pFront;
                             config.pBack = subInst.pBack;
                             config.pLeft = subInst.pLeft;
@@ -1519,16 +1599,19 @@ void AnimationManager::SaveAllSettings() {
                                               config.pFrontRight || config.pFrontLeft || config.pBackRight ||
                                               config.pBackLeft || config.pRandom || config.pDodge);
 
-                            // Para NPCs, todas as entradas são consideradas "pais" na playlist simples deles.
-                            if (isNpcRule) {
-                                isParent = true;
-                            }
-
                             config.isParent = isParent;
 
                             if (isParent) {
                                 lastParentOrder = playlistParentCounter;
                                 config.order_in_playlist = playlistParentCounter++;
+
+                                // ETAPA 2: POPULAR O CAMPO childDirections USANDO O MAPA
+                                auto it = childDirectionsByParentOrder.find(config.order_in_playlist);
+                                if (it != childDirectionsByParentOrder.end()) {
+                                    config.childDirections = it->second;
+                                }
+                                // ======================= FIM DA CORREÇÃO =======================
+
                             } else {
                                 config.order_in_playlist = lastParentOrder;
                             }
@@ -2179,13 +2262,12 @@ void AnimationManager::SaveCycleMovesets() {
 
                 for (int i = 0; i < stanceLimit; ++i) {  // Stances
                     const CategoryInstance& instance = category.instances[i];
-                    for (const auto& modInst : instance.modInstances) {
+                    for (size_t mod_idx = 0; mod_idx < instance.modInstances.size(); ++mod_idx) {
+                        const auto& modInst = instance.modInstances[mod_idx];
                         if (!modInst.isSelected) continue;
 
                         const auto& sourceMod = _allMods[modInst.sourceModIndex];
 
-                        // **A lógica de construção do JSON agora acontece DENTRO do loop de sub-animações,
-                        // mas de forma que agrupe corretamente, como no seu original.**
                         int animationIndexCounter = 1;
                         for (const auto& subInst : modInst.subAnimationInstances) {
                             if (!subInst.isSelected) continue;
@@ -2203,7 +2285,7 @@ void AnimationManager::SaveCycleMovesets() {
                             rapidjson::Document& doc = *documents[destJsonPath];
                             auto& allocator = doc.GetAllocator();
 
-                            // 1. Encontra/Cria o Perfil do Ator (Lydia, General, Player, etc.)
+                            // 1. Encontra/Cria o Perfil do Ator
                             rapidjson::Value* profileObj = nullptr;
                             for (auto& item : doc.GetArray()) {
                                 if (item.IsObject() && item.HasMember("FormID") &&
@@ -2229,7 +2311,7 @@ void AnimationManager::SaveCycleMovesets() {
                                 profileObj = &doc.GetArray()[doc.GetArray().Size() - 1];
                             }
 
-                            // 2. Encontra/Cria a Categoria (ex: "Sword")
+                            // 2. Encontra/Cria a Categoria
                             rapidjson::Value& menuArray = (*profileObj)["Menu"];
                             rapidjson::Value* categoryObj = nullptr;
                             for (auto& item : menuArray.GetArray()) {
@@ -2248,7 +2330,7 @@ void AnimationManager::SaveCycleMovesets() {
                                 categoryObj = &menuArray.GetArray()[menuArray.GetArray().Size() - 1];
                             }
 
-                            // 3. Encontra/Cria a Stance (o moveset, ex: "017 ERmoveset")
+                            // 3. Encontra/Cria a Stance (o moveset)
                             rapidjson::Value& stancesArray = (*categoryObj)["stances"];
                             rapidjson::Value* stanceObj = nullptr;
                             for (auto& item : stancesArray.GetArray()) {
@@ -2266,6 +2348,11 @@ void AnimationManager::SaveCycleMovesets() {
                                                        allocator);
                                 newStanceObj.AddMember("level", modInst.level, allocator);
                                 newStanceObj.AddMember("hp", modInst.hp, allocator);
+
+                                // <<< MUDANÇA PRINCIPAL: Usa o índice do loop (mod_idx) para definir a ordem
+                                // Adicionamos +1 porque a ordem no JSON deve começar em 1, não em 0.
+                                newStanceObj.AddMember("order", static_cast<int>(mod_idx + 1), allocator);
+
                                 newStanceObj.AddMember("animations", rapidjson::kArrayType, allocator);
                                 stancesArray.PushBack(newStanceObj, allocator);
                                 stanceObj = &stancesArray.GetArray()[stancesArray.GetArray().Size() - 1];
@@ -2274,7 +2361,7 @@ void AnimationManager::SaveCycleMovesets() {
                             // 4. Adiciona a Animação individual ao array "animations" da Stance
                             rapidjson::Value& animationsArray = (*stanceObj)["animations"];
                             rapidjson::Value animObj(rapidjson::kObjectType);
-                            animObj.AddMember("index", animationIndexCounter++, allocator);  // Usamos um contador
+                            animObj.AddMember("index", animationIndexCounter++, allocator);
                             animObj.AddMember("sourceModName", rapidjson::Value(animOriginMod.name.c_str(), allocator),
                                               allocator);
                             animObj.AddMember("sourceSubName", rapidjson::Value(animOriginSub.name.c_str(), allocator),
@@ -2327,14 +2414,23 @@ void AnimationManager::SaveCycleMovesets() {
         }
 
         // Limpa arquivos órfãos
-        const std::filesystem::path oarRootPath = "Data\\meshes\\actors\\character\\animations\\OpenAnimationReplacer";
-        if (std::filesystem::exists(oarRootPath)) {
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(oarRootPath)) {
-                if (entry.is_regular_file() && entry.path().filename() == "User_CycleMoveset.json") {
-                    if (requiredFiles.find(entry.path()) == requiredFiles.end()) {
-                        SKSE::log::info("Removendo arquivo de UI órfão: {}", entry.path().string());
-                        std::filesystem::remove(entry.path());
-                    }
+        
+        for (const auto& managedConfigPath : _managedFiles) {
+            // Deriva o nome do arquivo de UI a partir do caminho do config.json gerenciado
+            std::filesystem::path userCycleMovesetPath = managedConfigPath.parent_path() / "User_CycleMoveset.json";
+
+            // Se o arquivo de UI não foi requerido nesta operação de salvamento, ele é um órfão.
+            if (requiredFiles.find(userCycleMovesetPath) == requiredFiles.end()) {
+                // Seja para limpar um arquivo existente ou criar um novo para sobrescrever um fallback,
+                // a operação é a mesma: escrever "[]" no arquivo.
+                SKSE::log::info("Limpando/Criando User_CycleMoveset.json órfão em: {}", userCycleMovesetPath.string());
+
+                std::ofstream ofs(userCycleMovesetPath, std::ofstream::trunc);
+                if (ofs) {
+                    ofs << "[]";  // Escreve um array JSON vazio
+                    ofs.close();
+                } else {
+                    SKSE::log::error("Falha ao abrir para limpar/criar o arquivo: {}", userCycleMovesetPath.string());
                 }
             }
         }
@@ -2344,7 +2440,7 @@ void AnimationManager::SaveCycleMovesets() {
 
 
 
-    void AnimationManager::LoadCycleMovesets() {
+void AnimationManager::LoadCycleMovesets() {
         SKSE::log::info("Iniciando carregamento de regras dos arquivos (User_)CycleMoveset.json...");
 
         // Limpa o estado atual para garantir um carregamento limpo
@@ -2470,13 +2566,22 @@ void AnimationManager::SaveCycleMovesets() {
                                 modInstancePtr->level = stanceJson["level"].GetInt();
                             if (stanceJson.HasMember("hp") && stanceJson["hp"].IsInt())
                                 modInstancePtr->hp = stanceJson["hp"].GetInt();
+                            if (stanceJson.HasMember("order") && stanceJson["order"].IsInt()) {
+                                modInstancePtr->order = stanceJson["order"].GetInt();
+                            }
                         }
                         // --- FIM DA LÓGICA DE AGRUPAMENTO ---
 
                         for (const auto& animJson : stanceJson["animations"].GetArray()) {
                             if (!animJson.IsObject() || !animJson.HasMember("sourceModName") ||
-                                !animJson.HasMember("sourceSubName"))
+                                !animJson.HasMember("sourceSubName") ||
+                                !animJson.HasMember("index") ||  // <<< MUDANÇA: Verifica se o index existe
+                                !animJson["index"].IsInt())
                                 continue;
+
+                            // <<< MUDANÇA: Lê o índice do JSON
+                            int subAnimIndex = animJson["index"].GetInt();
+                            if (subAnimIndex < 1) continue;  // Índices devem ser 1 ou maiores
 
                             SubAnimationInstance newSubInstance;
                             auto subModIdxOpt = FindModIndexByName(animJson["sourceModName"].GetString());
@@ -2509,10 +2614,14 @@ void AnimationManager::SaveCycleMovesets() {
                             if (animJson.HasMember("pRandom")) newSubInstance.pRandom = animJson["pRandom"].GetBool();
                             if (animJson.HasMember("pDodge")) newSubInstance.pDodge = animJson["pDodge"].GetBool();
 
-                            // Adiciona a sub-animação ao moveset correto (encontrado ou criado)
-                            modInstancePtr->subAnimationInstances.push_back(newSubInstance);
+                            // <<< MUDANÇA: Lógica para inserir na posição correta
+                            // Garante que o vetor tenha espaço suficiente para o novo índice
+                            if (modInstancePtr->subAnimationInstances.size() < subAnimIndex) {
+                                modInstancePtr->subAnimationInstances.resize(subAnimIndex);
+                            }
+                            // Insere o objeto na posição correta (index - 1 para converter para base 0)
+                            modInstancePtr->subAnimationInstances[subAnimIndex - 1] = newSubInstance;
                         }
-                        //targetInstance.modInstances.push_back(newModInstance);
                     }
                 }
             }
@@ -2534,6 +2643,29 @@ void AnimationManager::SaveCycleMovesets() {
                     processJsonFile(entry.path());
                 }
             }
+        }
+
+        // <<< MUDANÇA: Adiciona um passo de ordenação DEPOIS de carregar todos os arquivos
+        SKSE::log::info("Ordenando movesets com base na prioridade definida...");
+
+        // Função auxiliar para ordenar os movesets dentro de uma coleção de categorias
+        auto sortMovesets = [](std::map<std::string, WeaponCategory>& categories) {
+            for (auto& categoryPair : categories) {
+                for (auto& instance : categoryPair.second.instances) {
+                    std::sort(instance.modInstances.begin(), instance.modInstances.end(),
+                              [](const ModInstance& a, const ModInstance& b) {
+                                  // Ordena pelo campo 'order' em ordem crescente
+                                  return a.order < b.order;
+                              });
+                }
+            }
+        };
+
+        // Aplica a ordenação a todas as regras (Player, GeneralNPC, e NPCs específicos)
+        sortMovesets(_categories);
+        sortMovesets(_generalNpcRule.categories);
+        for (auto& rule : _npcRules) {
+            sortMovesets(rule.categories);
         }
 
         SKSE::log::info("Carregamento de regras concluído.");
@@ -2649,8 +2781,7 @@ void AnimationManager::SaveCycleMovesets() {
                                                         int directionalState) {
 
         // <--- LOG 1: Entrada da Função ---
-        SKSE::log::info("[GetCurrentMovesetName] Buscando: Cat='{}', Stance={}, MovesetIdx={}, DirState={}", categoryName,
-                        stanceIndex, movesetIndex, directionalState);
+        //SKSE::log::info("[GetCurrentMovesetName] Buscando: Cat='{}', Stance={}, MovesetIdx={}, DirState={}", categoryName,stanceIndex, movesetIndex, directionalState);
 
         if (movesetIndex <= 0) {
             return "Nenhum";
@@ -2690,7 +2821,7 @@ void AnimationManager::SaveCycleMovesets() {
                         const auto& sourceSubAnimParent =
                             _allMods[subInst.sourceModIndex].subAnimations[subInst.sourceSubAnimIndex];
                         parentSubmovesetName = sourceSubAnimParent.name;
-                        SKSE::log::info("  -> Pai #{} encontrado: '{}'.", movesetIndex, parentSubmovesetName);
+                        //SKSE::log::info("  -> Pai #{} encontrado: '{}'.", movesetIndex, parentSubmovesetName);
                         goto found_parent;  // Pula para fora dos loops aninhados
                     }
                 }
@@ -2714,11 +2845,11 @@ void AnimationManager::SaveCycleMovesets() {
                 if (!childSubInst.isSelected) continue;
 
                 // Log de verificação (pode ser comentado depois de funcionar)
-                SKSE::log::info("    -- Verificando filho: '{}' [F:{}, B:{}, L:{}, R:{}, FR:{}, FL:{}, BR:{}, BL:{}]",
+                /*SKSE::log::info("    -- Verificando filho: '{}' [F:{}, B:{}, L:{}, R:{}, FR:{}, FL:{}, BR:{}, BL:{}]",
                                 _allMods[childSubInst.sourceModIndex].subAnimations[childSubInst.sourceSubAnimIndex].name,
                                 childSubInst.pFront, childSubInst.pBack, childSubInst.pLeft, childSubInst.pRight,
                                 childSubInst.pFrontRight, childSubInst.pFrontLeft, childSubInst.pBackRight,
-                                childSubInst.pBackLeft);
+                                childSubInst.pBackLeft);*/
 
                 bool isDirectionalMatch =
                     (directionalState == 1 && childSubInst.pFront) || (directionalState == 2 && childSubInst.pFrontRight) ||
@@ -3034,17 +3165,17 @@ void AnimationManager::SaveCycleMovesets() {
                 cycleDoc.SetObject();
                 auto& allocator = cycleDoc.GetAllocator();
 
-                // CRIA O ARRAY DE FONTES
                 rapidjson::Value sourcesArray(rapidjson::kArrayType);
                 bool anyBfco = false;
 
-                // Itera sobre todas as instâncias agrupadas sob este nome
+                // ===== INÍCIO DA CORREÇÃO =====
+                // 1. Cria um set para armazenar os paths únicos que já foram adicionados a este JSON.
+                std::set<std::string> uniquePaths;
+                // ===== FIM DA CORREÇÃO =====
+
                 for (const auto* instancePtr : data.instances) {
                     if (!instancePtr || !instancePtr->sourceDef) continue;
 
-                    rapidjson::Value sourceObj(rapidjson::kObjectType);
-
-                    // Pega o caminho original da pasta
                     std::string originalPathStr;
                     if (instancePtr->sourceDef->path.filename() == "config.json") {
                         originalPathStr = instancePtr->sourceDef->path.parent_path().string();
@@ -3055,25 +3186,31 @@ void AnimationManager::SaveCycleMovesets() {
                     if (pos != std::string::npos) {
                         originalPathStr = originalPathStr.substr(pos + 5);
                     }
-                    sourceObj.AddMember("path", rapidjson::Value(originalPathStr.c_str(), allocator), allocator);
 
-                    // Adiciona a lista "filesToCopy" se houver alguma seleção
-                    int selectedCount = 0;
-                    rapidjson::Value filesArray(rapidjson::kArrayType);
-                    for (const auto& [filename, isSelected] : instancePtr->hkxFileSelection) {
-                        if (isSelected) {
-                            filesArray.PushBack(rapidjson::Value(filename.c_str(), allocator), allocator);
-                            selectedCount++;
+                    // ===== INÍCIO DA CORREÇÃO =====
+                    // 2. Tenta inserir o path no set. O bloco if só será executado se o path for novo.
+                    if (uniquePaths.insert(originalPathStr).second) {
+                        // ===== FIM DA CORREÇÃO =====
+
+                        rapidjson::Value sourceObj(rapidjson::kObjectType);
+                        sourceObj.AddMember("path", rapidjson::Value(originalPathStr.c_str(), allocator), allocator);
+
+                        int selectedCount = 0;
+                        rapidjson::Value filesArray(rapidjson::kArrayType);
+                        for (const auto& [filename, isSelected] : instancePtr->hkxFileSelection) {
+                            if (isSelected) {
+                                filesArray.PushBack(rapidjson::Value(filename.c_str(), allocator), allocator);
+                                selectedCount++;
+                            }
                         }
-                    }
-                    if (selectedCount < instancePtr->hkxFileSelection.size() && selectedCount > 0) {
-                        sourceObj.AddMember("filesToCopy", filesArray, allocator);
-                    }
-                    // Se nenhum arquivo for selecionado para esta fonte, pula ela.
-                    if (selectedCount == 0) continue;
+                        if (selectedCount < instancePtr->hkxFileSelection.size() && selectedCount > 0) {
+                            sourceObj.AddMember("filesToCopy", filesArray, allocator);
+                        }
+                        if (selectedCount == 0) continue;
 
-                    sourcesArray.PushBack(sourceObj, allocator);
-                    if (instancePtr->isBFCO) anyBfco = true;
+                        sourcesArray.PushBack(sourceObj, allocator);
+                        if (instancePtr->isBFCO) anyBfco = true;
+                    }
                 }
 
                 cycleDoc.AddMember("sources", sourcesArray, allocator);
@@ -3128,6 +3265,7 @@ void AnimationManager::SaveCycleMovesets() {
                         newStanceObj.AddMember("name", rapidjson::Value(movesetName.c_str(), allocator), allocator);
                         newStanceObj.AddMember("level", 0, allocator);
                         newStanceObj.AddMember("hp", 100, allocator);
+                        newStanceObj.AddMember("order", 1, allocator);
 
                         rapidjson::Value animationsArray(rapidjson::kArrayType);
 
@@ -3893,7 +4031,7 @@ void AnimationManager::SaveCycleMovesets() {
 
 void AnimationManager::DrawNpcSelectionModal() {
         if (_isNpcSelectionModalOpen) {
-            ImGui::OpenPopup("Seletor Universal");
+            ImGui::OpenPopup("Selector");
         }
 
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -3901,7 +4039,7 @@ void AnimationManager::DrawNpcSelectionModal() {
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * 0.7f, viewport->Size.y * 0.7f));
 
-        if (ImGui::BeginPopupModal("Seletor Universal", &_isNpcSelectionModalOpen, ImGuiWindowFlags_None)) {
+        if (ImGui::BeginPopupModal("Selector", &_isNpcSelectionModalOpen, ImGuiWindowFlags_None)) {
             // --- LOG 1: Verificar se as listas de dados principais estão carregadas ---
             if (ImGui::IsWindowAppearing()) {  // Loga apenas na primeira vez que o modal abre
                 SKSE::log::info(
@@ -3910,19 +4048,19 @@ void AnimationManager::DrawNpcSelectionModal() {
                     _fullNpcList.size(), _allFactions.size(), _allKeywords.size(), _allRaces.size());
             }
 
-            const char* title = "Selecione o Item";
+            const char* title = "Select one";
             switch (_ruleTypeToCreate) {
                 case RuleType::UniqueNPC:
-                    title = "Selecione um NPC Único";
+                    title = "NPC";
                     break;
                 case RuleType::Keyword:
-                    title = "Selecione uma Keyword";
+                    title = "Keyword";
                     break;
                 case RuleType::Faction:
-                    title = "Selecione uma Facção";
+                    title = "Faction";
                     break;
                 case RuleType::Race:
-                    title = "Selecione uma Raça";
+                    title = "Race";
                     break;
             }
             ImGui::Text("%s", title);
@@ -3942,10 +4080,10 @@ void AnimationManager::DrawNpcSelectionModal() {
 
             if (ImGui::BeginTable("SelectionTable", 4,
                                   ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
-                ImGui::TableSetupColumn("Nome", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableSetupColumn("EditorID / ID", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableSetupColumn("Plugin", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableSetupColumn("Ação", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                ImGui::TableSetupColumn("Add", ImGuiTableColumnFlags_WidthFixed, 100.0f);
                 ImGui::TableHeadersRow();
 
                 std::string filterTextLower = filterBuffer;
@@ -3955,8 +4093,7 @@ void AnimationManager::DrawNpcSelectionModal() {
                                                  : _pluginList[_selectedPluginIndex];
 
                 // --- LOG 2: Verificar os filtros atuais ---
-                SKSE::log::info("[NpcSelectionModal] Filtros Ativos -> Texto: '{}', Plugin: '{}' (índice {})",
-                                filterTextLower, selectedPlugin, _selectedPluginIndex);
+                //SKSE::log::info("[NpcSelectionModal] Filtros Ativos -> Texto: '{}', Plugin: '{}' (índice {})",filterTextLower, selectedPlugin, _selectedPluginIndex);
 
                 switch (_ruleTypeToCreate) {
                     case RuleType::UniqueNPC: {
@@ -4010,7 +4147,7 @@ void AnimationManager::DrawNpcSelectionModal() {
                             ImGui::Text("%s", npc.pluginName.c_str());
                             ImGui::TableNextColumn();
                             ImGui::PushID(npc.formID);
-                            if (ImGui::Button("Selecionar")) {
+                            if (ImGui::Button("Select")) {
                                 MovesetRule newRule;
                                 newRule.type = RuleType::UniqueNPC;
                                 newRule.displayName = npc.name;
@@ -4087,7 +4224,7 @@ void AnimationManager::DrawNpcSelectionModal() {
                                 ImGui::Text("%s", info.pluginName.c_str());
                                 ImGui::TableNextColumn();
                                 ImGui::PushID(info.formID);
-                                if (ImGui::Button("Selecionar")) {
+                                if (ImGui::Button("Select")) {
                                     MovesetRule newRule;
                                     newRule.type = _ruleTypeToCreate;
                                     newRule.displayName = info.editorID;
@@ -4154,7 +4291,7 @@ void AnimationManager::DrawNpcSelectionModal() {
     }
 
 void AnimationManager::LoadGameDataForNpcRules() {
-        SKSE::log::info("Iniciando carregamento de dados (Facções, Keywords, Raças) para o Gerenciador de Regras...");
+        //SKSE::log::info("Iniciando carregamento de dados (Facções, Keywords, Raças) para o Gerenciador de Regras...");
 
         _allFactions.clear();
         _allKeywords.clear();
@@ -4295,16 +4432,15 @@ void AnimationManager::LoadGameDataForNpcRules() {
             SKSE::log::info("[FindBestMoveset] Ator nulo fornecido. Retornando regra geral padrão.");
             return {&_generalNpcRule, 0, GetPriorityForType(RuleType::GeneralNPC)};
         }
-        SKSE::log::info("=====================================================================");
-        SKSE::log::info("[FindBestMoveset] Inciando busca para o ator: '{}' ({:08X}), Categoria: '{}'",
-                        actor->GetName(), actor->GetFormID(), categoryName);
+        //SKSE::log::info("=====================================================================");
+        //SKSE::log::info("[FindBestMoveset] Inciando busca para o ator: '{}' ({:08X}), Categoria: '{}'",actor->GetName(), actor->GetFormID(), categoryName);
     
         const std::vector<RuleType> priorityOrder = {RuleType::UniqueNPC, RuleType::Keyword, RuleType::Faction,
                                                      RuleType::Race};
 
         // Itera pela ordem de prioridade dos TIPOS de regra
         for (const auto& typeToFind : priorityOrder) {
-            SKSE::log::info("[FindBestMoveset] Checando regras do tipo: {}", RuleTypeToString(typeToFind));
+            //SKSE::log::info("[FindBestMoveset] Checando regras do tipo: {}", RuleTypeToString(typeToFind));
             // Itera pela lista de regras da UI (respeitando a sub-prioridade da ordem da lista)
             for (const auto& rule : _npcRules) {
                 if (rule.type != typeToFind) continue;
@@ -4334,7 +4470,7 @@ void AnimationManager::LoadGameDataForNpcRules() {
                 if (match) {
                     auto category_it = rule.categories.find(categoryName);
                     if (category_it != rule.categories.end()) {
-                        SKSE::log::info("    [MATCH!] A regra '{}' se aplica ao ator.", rule.displayName);
+                        //SKSE::log::info("    [MATCH!] A regra '{}' se aplica ao ator.", rule.displayName);
                         const auto& category = category_it->second;
                         int count = 0;
                         // Calcula a contagem de movesets selecionados (ainda útil ter essa info)
@@ -4343,7 +4479,7 @@ void AnimationManager::LoadGameDataForNpcRules() {
                         }
 
                         if (count > 0) {
-                            SKSE::log::info("    -> Categoria tem {} movesets. RETORNANDO ESTA REGRA.", count);
+                            //SKSE::log::info("    -> Categoria tem {} movesets. RETORNANDO ESTA REGRA.", count);
                             // AQUI ESTÁ A MUDANÇA: Retornamos um ponteiro para a regra atual (&rule)
                             return {&rule, count, GetPriorityForType(rule.type)};
                         }
@@ -4369,9 +4505,8 @@ void AnimationManager::LoadGameDataForNpcRules() {
 
     std::vector<int> AnimationManager::GetAvailableMovesetIndices(RE::Actor* actor, const std::string& categoryName) {
         if (!actor) return {};
-        SKSE::log::info("---------------------------------------------------------------------");
-        SKSE::log::info("[GetAvailableIndices] Buscando índices para o ator: '{}', Categoria: '{}'", actor->GetName(),
-                        categoryName);
+        //SKSE::log::info("---------------------------------------------------------------------");
+        //SKSE::log::info("[GetAvailableIndices] Buscando índices para o ator: '{}', Categoria: '{}'", actor->GetName(),categoryName);
 
         // 1. Chama a função modificada para obter o "match" completo
         NpcRuleMatch match = FindBestMovesetConfiguration(actor, categoryName);
@@ -4384,12 +4519,11 @@ void AnimationManager::LoadGameDataForNpcRules() {
             SKSE::log::error("FindBestMovesetConfiguration retornou um ponteiro nulo inesperadamente!");
             return {};
         }
-        SKSE::log::info("[GetAvailableIndices] Regra determinada: '{}'", rule->displayName);
+        //SKSE::log::info("[GetAvailableIndices] Regra determinada: '{}'", rule->displayName);
         // 2. Encontra a categoria de arma dentro da regra
         auto categoryIt = rule->categories.find(categoryName);
         if (categoryIt == rule->categories.end()) {
-            SKSE::log::warn("[GetAvailableIndices] A regra '{}' não possui a categoria '{}'. Retornando lista vazia.",
-                            rule->displayName, categoryName);
+            //SKSE::log::warn("[GetAvailableIndices] A regra '{}' não possui a categoria '{}'. Retornando lista vazia.",rule->displayName, categoryName);
             return {};
         }
         const CategoryInstance& instance = categoryIt->second.instances[0];  // Stance 0 para NPCs
@@ -4404,8 +4538,7 @@ void AnimationManager::LoadGameDataForNpcRules() {
         // Futuramente, adicione aqui:
         // float staminaPercent = actor->GetActorValuePercentage(RE::ActorValue::kStamina) * 100.0f;
         // float magickaPercent = actor->GetActorValuePercentage(RE::ActorValue::kMagicka) * 100.0f;
-        SKSE::log::info("[GetAvailableIndices] Status atuais do ator -> HP: {:.2f} ({:.2f}/{:.2f}), Nível: {}",
-                        hpPercent, currentHealth, maxHealth, level);
+        //SKSE::log::info("[GetAvailableIndices] Status atuais do ator -> HP: {:.2f} ({:.2f}/{:.2f}), Nível: {}",hpPercent, currentHealth, maxHealth, level);
         std::vector<int> availableIndices;
         int currentPlaylistIndex = 1;  // OAR começa a contagem em 1
 
@@ -4413,14 +4546,13 @@ void AnimationManager::LoadGameDataForNpcRules() {
         for (const auto& modInst : instance.modInstances) {
             if (modInst.isSelected) {
                 const auto& sourceMod = _allMods[modInst.sourceModIndex];
-                SKSE::log::info("  -> Checando moveset #{}: '{}'", currentPlaylistIndex, sourceMod.name);
+                //SKSE::log::info("  -> Checando moveset #{}: '{}'", currentPlaylistIndex, sourceMod.name);
 
                 // 5. AQUI ESTÁ A MÁGICA: Verifica as condições
                 bool conditionsMet = (hpPercent <= modInst.hp && level >= modInst.level);
                 // Futuramente, adicione aqui:
                 // && staminaPercent <= modInst.stamina && magickaPercent <= modInst.magicka
-                SKSE::log::info("     Condição: (HP {:.2f} <= {} && Nível {} >= {}) -> Resultado: {}", hpPercent,
-                               modInst.hp, level, modInst.level, conditionsMet ? "VÁLIDO" : "INVÁLIDO");
+                //SKSE::log::info("     Condição: (HP {:.2f} <= {} && Nível {} >= {}) -> Resultado: {}", hpPercent,modInst.hp, level, modInst.level, conditionsMet ? "VÁLIDO" : "INVÁLIDO");
 
                 if (conditionsMet) {
                     // Este moveset é válido! Adiciona seu número de playlist à lista.
@@ -4437,8 +4569,16 @@ void AnimationManager::LoadGameDataForNpcRules() {
             result_string += std::to_string(idx) + " ";
         }
         result_string += "]";
-        SKSE::log::info("[GetAvailableIndices] Filtro concluído. Retornando índices disponíveis: {}", result_string);
-        SKSE::log::info("---------------------------------------------------------------------");
+        //SKSE::log::info("[GetAvailableIndices] Filtro concluído. Retornando índices disponíveis: {}", result_string);
+        //SKSE::log::info("---------------------------------------------------------------------");
 
         return availableIndices;
+    }
+
+    void Settings::SyncMovementKeys() {
+        keyForward = static_cast<uint32_t>(Settings::keyForward_k);
+        keyBack = static_cast<uint32_t>(Settings::keyBack_k);
+        keyLeft = static_cast<uint32_t>(Settings::keyLeft_k);
+        keyRight = static_cast<uint32_t>(Settings::keyRight_k);
+        SKSE::log::info("Teclas de movimento sincronizadas para o runtime.");
     }

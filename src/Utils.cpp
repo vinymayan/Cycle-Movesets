@@ -58,18 +58,15 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
             const uint32_t scanCode = button->GetIDCode();
 
             // Lógica rigorosa de máquina de estados para cada tecla
-            if (scanCode == W_KEY) {
-                // Só mude para 'pressionado' se a tecla ESTIVER 'down' E nosso estado atual for 'solto'.
+            if (scanCode == Settings::keyForward) {  // Antes era W_KEY
                 if (button->IsDown() && !w_pressed) {
                     w_pressed = true;
                     umaTeclaDeMovimentoMudou = true;
-                }
-                // Só mude para 'solto' se a tecla ESTIVER 'up' E nosso estado atual for 'pressionado'.
-                else if (button->IsUp() && w_pressed) {
+                } else if (button->IsUp() && w_pressed) {
                     w_pressed = false;
                     umaTeclaDeMovimentoMudou = true;
                 }
-            } else if (scanCode == A_KEY) {
+            } else if (scanCode == Settings::keyLeft) {  // Antes era A_KEY
                 if (button->IsDown() && !a_pressed) {
                     a_pressed = true;
                     umaTeclaDeMovimentoMudou = true;
@@ -77,7 +74,7 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
                     a_pressed = false;
                     umaTeclaDeMovimentoMudou = true;
                 }
-            } else if (scanCode == S_KEY) {
+            } else if (scanCode == Settings::keyBack) {  // Antes era S_KEY
                 if (button->IsDown() && !s_pressed) {
                     s_pressed = true;
                     umaTeclaDeMovimentoMudou = true;
@@ -85,7 +82,7 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
                     s_pressed = false;
                     umaTeclaDeMovimentoMudou = true;
                 }
-            } else if (scanCode == D_KEY) {
+            } else if (scanCode == Settings::keyRight) {  // Antes era D_KEY
                 if (button->IsDown() && !d_pressed) {
                     d_pressed = true;
                     umaTeclaDeMovimentoMudou = true;
@@ -147,12 +144,13 @@ void InputListener::UpdateDirectionalState() {
         // Aqui você enviaria o valor para sua animação, por exemplo:
         // RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("MinhaVariavelDirecional",
         // directionalState );
-        if (GlobalControl::g_isWeaponDrawn && !GlobalControl::MovesetChangesOpen && !GlobalControl::StanceChangesOpen) {
+        if (GlobalControl::g_isWeaponDrawn && !GlobalControl::MovesetChangesOpen && !GlobalControl::StanceChangesOpen && GlobalControl::IsThirdPerson()) {
             SkyPromptAPI::SendPrompt(GlobalControl::MovesetSink::GetSingleton(), GlobalControl::g_clientID);
             //SKSE::log::info("SkyPrompt reenviado devido à mudança de direção.");
             
         }
-        if (GlobalControl::g_isWeaponDrawn && GlobalControl::MovesetChangesOpen && !GlobalControl::StanceChangesOpen) {
+        if (GlobalControl::g_isWeaponDrawn && GlobalControl::MovesetChangesOpen && !GlobalControl::StanceChangesOpen &&
+            GlobalControl::IsThirdPerson()) {
             SkyPromptAPI::SendPrompt(GlobalControl::MovesetChangesSink::GetSingleton(), GlobalControl::g_clientID);
             
             //SKSE::log::info("SkyPrompt reenviado devido à mudança de direção e menu aberto.");
@@ -396,7 +394,7 @@ void GlobalControl::MovesetSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
             SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
             break;
         case SkyPromptAPI::kDeclined:
-            g_currentMoveset = 0;
+            g_currentMoveset = 1;
             UpdateSkyPromptTexts();
             RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", g_currentMoveset);
             //GlobalControl::MovesetText = "Moveset";
@@ -482,7 +480,7 @@ RE::BSEventNotifyControl GlobalControl::CameraChange::ProcessEvent(const SKSE::C
         SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
         SkyPromptAPI::RemovePrompt(StancesChangesSink::GetSingleton(), g_clientID);
         SkyPromptAPI::RemovePrompt(MovesetChangesSink::GetSingleton(), g_clientID);
-        logger::info("me retorna aqui vei");
+        //logger::info("me retorna aqui vei");
     }
     if (RE::PlayerCamera::GetSingleton()->IsInThirdPerson() && g_isWeaponDrawn && !Cycleopen) {
         Cycleopen = true;
@@ -523,7 +521,7 @@ RE::BSEventNotifyControl GlobalControl::ActionEventHandler::ProcessEvent(const S
         }
         // Jogador terminou de guardar a arma
         else if (a_event->type == SKSE::ActionEvent::Type::kEndSheathe) {
-            SKSE::log::info("Arma guardada, escondendo o menu.");
+            //SKSE::log::info("Arma guardada, escondendo o menu.");
             g_isWeaponDrawn = false;  // Define nosso controle como falso
             // Limpa os prompts da API, fazendo o menu desaparecer
             SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
@@ -581,7 +579,7 @@ void GlobalControl::TriggerSmartRandomNumber([[maybe_unused]] const std::string&
     // g_comboState.previousMoveset = g_comboState.lastMoveset;
     // g_comboState.lastMoveset = nextMoveset;
 
-    if (g_isWeaponDrawn) {
+    if (g_isWeaponDrawn && RE::PlayerCamera::GetSingleton()->IsInThirdPerson()) {
         SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
     }
 }
@@ -615,7 +613,7 @@ RE::BSEventNotifyControl GlobalControl::MenuOpen::ProcessEvent(const RE::MenuOpe
     if (!IsAnyMenuOpen() && IsThirdPerson() && g_isWeaponDrawn && !Cycleopen) {
         Cycleopen = true;
         UpdateSkyPromptTexts();
-        logger::info("O valor de MovesetText é: {}", MovesetText);
+        //logger::info("O valor de MovesetText é: {}", MovesetText);
         SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
         SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
     } 
@@ -655,7 +653,7 @@ RE::BSEventNotifyControl GlobalControl::AnimationEventHandler::ProcessEvent(
         }
         else if(eventName == "weaponSwing" || eventName == "weaponLeftSwing" ||
             eventName == "h2hAttack" || eventName == "PowerAttack_Start_end") {
-            SKSE::log::info("[AnimationEventHandler] Evento '{}' detectado. Timer INICIADO. g_comboState.isTimerRunning AGORA É: {}",eventName, g_comboState.isTimerRunning);
+            //SKSE::log::info("[AnimationEventHandler] Evento '{}' detectado. Timer INICIADO. g_comboState.isTimerRunning AGORA É: {}",eventName, g_comboState.isTimerRunning);
             //SKSE::log::info("[AnimationEventHandler] Evento '{}' detectado. Timer INICIADO.", eventName);
             // Apenas definimos o estado e o momento em que o combo deve terminar.
             g_comboState.isTimerRunning = true;
@@ -728,7 +726,7 @@ RE::BSEventNotifyControl GlobalControl::NpcCycleSink::ProcessEvent(const RE::BSA
         // Precisamos encontrar o ponteiro do ator a partir do FormID
         auto actor = RE::TESForm::LookupByID<RE::Actor>(formID);
         if (actor) {
-            SKSE::log::info("[UpdateHandler] Combo do ator {:08X} expirou.", formID);
+            //SKSE::log::info("[UpdateHandler] Combo do ator {:08X} expirou.", formID);
             // Adicionamos a lógica para chamar a função para o ator específico
             // Usando SKSE::GetTaskInterface() ainda é uma boa prática
             SKSE::GetTaskInterface()->AddTask([actor]() { NPCrandomNumber(actor, "Fim de Combo"); });

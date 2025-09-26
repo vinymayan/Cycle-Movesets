@@ -24,11 +24,23 @@ namespace Settings {
     inline int hotkey_quarta_k = 16; // Teclado (Q)
     inline int hotkey_quarta_g = 264; // Controle (LB)
 
+    inline int keyForward_k = 17;  // W (DX Scan Code)
+    inline int keyBack_k = 31;      // S (DX Scan Code)
+    inline int keyLeft_k = 30;      // A (DX Scan Code)
+    inline int keyRight_k = 32;     // D (DX Scan Code)
+
     inline bool CycleMoveset = true;
     inline float CycleTimer = 1.2f;
     inline bool RandomCycle = false;
     inline bool ShowMenu = true;
     inline std::string SelectedLanguage = "English";
+
+    inline uint32_t keyForward = 0x11;
+    inline uint32_t keyBack = 0x1F;
+    inline uint32_t keyLeft = 0x1E;
+    inline uint32_t keyRight = 0x20;
+
+    void SyncMovementKeys();
     
 }
 
