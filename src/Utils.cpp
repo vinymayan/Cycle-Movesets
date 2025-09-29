@@ -2,7 +2,8 @@
 #include "Utils.h"
 #include "Events.h"
 #include <random>
-
+#include <vector>
+#include <algorithm> // Para std::max_element
 
 // Scancodes das teclas WASD
 constexpr uint32_t W_KEY = 0x11;
@@ -10,6 +11,11 @@ constexpr uint32_t A_KEY = 0x1E;
 constexpr uint32_t S_KEY = 0x1F;
 constexpr uint32_t D_KEY = 0x20;
 int GlobalControl::g_directionalState = 0;
+
+struct MatchResult {
+    const WeaponCategory* category = nullptr;
+    int score = -1;  // Pontuação de especificidade
+};
 // Esta função é chamada a cada frame de input
 RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_event,
                                                      RE::BSTEventSource<RE::InputEvent*>*) {
@@ -166,48 +172,52 @@ void InputListener::UpdateDirectionalState() {
 std::string GetActorWeaponCategoryName(RE::Actor* targetActor) {
     if (!targetActor) return "Unarmed";
 
+    // 1. Obter os objetos equipados em ambas as mãos
     auto rightHand = targetActor->GetEquippedObject(false);
     auto leftHand = targetActor->GetEquippedObject(true);
 
     RE::TESObjectWEAP* rightWeapon = rightHand ? rightHand->As<RE::TESObjectWEAP>() : nullptr;
-    RE::TESObjectARMO* leftArmor = leftHand ? leftHand->As<RE::TESObjectARMO>() : nullptr;  // Para escudos
+    RE::TESObjectWEAP* leftWeapon = leftHand ? leftHand->As<RE::TESObjectWEAP>() : nullptr;
+    RE::TESObjectARMO* leftArmor = leftHand ? leftHand->As<RE::TESObjectARMO>() : nullptr;
 
-    // Valor padrão para a mão esquerda (0.0 = vazia)
-    double leftHandType = 0.0;
-    if (leftHand) {
-        if (auto leftWeapon = leftHand->As<RE::TESObjectWEAP>()) {
-            leftHandType = static_cast<double>(leftWeapon->GetWeaponType());
-        } else if (auto leftShield = leftHand->As<RE::TESObjectARMO>()) {
-            if (leftShield->IsShield()) {
-                leftHandType = 11.0;  // Usando 11.0 como o tipo para escudos
-            }
-        }
-    }
-
-    if (!rightWeapon) {
-        // Se a mão direita está vazia, a única categoria possível é Unarmed
-        // (a menos que você crie categorias para magias, etc.)
+    // 2. Lógica inicial de checagem de estado
+    // É "Unarmed" apenas se AMBAS as mãos estiverem efetivamente vazias (ou com itens não relevantes)
+    if (!rightWeapon && !leftWeapon && (!leftArmor || !leftArmor->IsShield())) {
         return "Unarmed";
     }
 
-    const auto& allCategories = AnimationManager::GetSingleton()->GetCategories();
-    double rightHandType = static_cast<double>(rightWeapon->GetWeaponType());
+    // 3. Determinar os tipos para ambas as mãos (padrão 0.0 para "vazio")
+    double rightHandType = rightWeapon ? static_cast<double>(rightWeapon->GetWeaponType()) : 0.0;
 
-    std::string fallbackCategory = "Unarmed";  // Um fallback caso nenhuma categoria com keyword seja encontrada
+
+    double leftHandType = 0.0;
+    if (leftWeapon) {
+        leftHandType = static_cast<double>(leftWeapon->GetWeaponType());
+    } else if (leftArmor && leftArmor->IsShield()) {
+        leftHandType = 11.0;  // Tipo para escudo
+    }
+
+    // ==============================================================================
+    // A lógica de correspondência e pontuação agora funciona universalmente
+    // ==============================================================================
+
+    const auto& allCategories = AnimationManager::GetSingleton()->GetCategories();
+    std::vector<MatchResult> matches;
+    std::string fallbackCategory = "Sem Categoria";  // Novo padrão para quando não há correspondência
 
     for (const auto& pair : allCategories) {
         const WeaponCategory& category = pair.second;
 
-        // --- LÓGICA DE MATCHING ---
-        // 1. Verifica se os tipos de equipamento (direita e esquerda) batem com a definição da categoria
-        bool rightHandMatch = (category.equippedTypeValue == rightHandType);
-        bool leftHandMatch =
+        double adjustedEquippedTypeValue = (category.equippedTypeValue == 10.0) ? 6.0 : category.equippedTypeValue;
+        // A. Checagem de Tipo
+        bool rightHandTypeMatch = (adjustedEquippedTypeValue == rightHandType);
+        bool leftHandTypeMatch =
             (category.leftHandEquippedTypeValue < 0.0 || category.leftHandEquippedTypeValue == leftHandType);
 
-        if (rightHandMatch && leftHandMatch) {
-            // 2. Se os tipos batem, verifica as keywords da mão direita
+        if (rightHandTypeMatch && leftHandTypeMatch) {
+            // B. Checagem de Keywords (apenas se a arma correspondente existir)
             bool rightKeywordsMatch = category.keywords.empty();
-            if (!rightKeywordsMatch) {
+            if (!rightKeywordsMatch && rightWeapon) {
                 for (const auto& keyword : category.keywords) {
                     if (rightWeapon->HasKeywordString(keyword)) {
                         rightKeywordsMatch = true;
@@ -216,35 +226,45 @@ std::string GetActorWeaponCategoryName(RE::Actor* targetActor) {
                 }
             }
 
-            // 3. Verifica as keywords da mão esquerda (se houver alguma definida)
             bool leftKeywordsMatch = category.leftHandKeywords.empty();
-            if (!leftKeywordsMatch && leftHand) {  // Só checa se a mão esquerda tem algo
-                if (auto leftWeapon = leftHand->As<RE::TESObjectWEAP>()) {
-                    for (const auto& keyword : category.leftHandKeywords) {
-                        if (leftWeapon->HasKeywordString(keyword)) {
-                            leftKeywordsMatch = true;
-                            break;
-                        }
+            if (!leftKeywordsMatch && leftWeapon) {  // Só checa keywords em armas na mão esquerda
+                for (const auto& keyword : category.leftHandKeywords) {
+                    if (leftWeapon->HasKeywordString(keyword)) {
+                        leftKeywordsMatch = true;
+                        break;
                     }
                 }
-                // Se for um escudo ou outro item, ele não terá keywords de arma,
-                // então leftKeywordsMatch continuará 'false' a menos que você adicione lógica para armaduras.
             }
 
-            // 4. Se tudo bate, encontramos nossa categoria
+            // C. Se tudo corresponde, calcula o score
             if (rightKeywordsMatch && leftKeywordsMatch) {
-                // Se a categoria não tem keywords (em nenhuma mão), ela é um fallback
-                if (category.keywords.empty() && category.leftHandKeywords.empty()) {
-                    fallbackCategory = category.name;
-                    continue;  // Continua procurando por uma mais específica
-                }
-                // Se tinha keywords e elas bateram, é um match definitivo
-                return category.name;
+                int score = 0;
+                // Keywords são o critério mais importante
+                if (!category.keywords.empty()) score += 4;
+                if (!category.leftHandKeywords.empty()) score += 4;
+
+                // Tipos específicos são o segundo critério mais importante
+                // Damos um score maior se a mão direita (principal) for definida
+                if (category.equippedTypeValue > 0.0) score += 2;
+                if (category.leftHandEquippedTypeValue >= 0.0) score += 1;
+
+                matches.push_back({&category, score});
             }
         }
     }
 
-    return fallbackCategory;
+    // Se não houver correspondências, retorna o fallback
+    if (matches.empty()) {
+        // Poderíamos adicionar uma lógica aqui para encontrar a categoria base (e.g., "Sword") se quiséssemos,
+        // mas retornar "Sem Categoria" é mais seguro para evitar falsos positivos.
+        return fallbackCategory;
+    }
+
+    // Encontra o elemento com o maior score
+    auto bestMatch = std::max_element(matches.begin(), matches.end(),
+                                      [](const MatchResult& a, const MatchResult& b) { return a.score < b.score; });
+
+    return bestMatch->category->name;
 }
 
 // NOVA VERSÃO SIMPLIFICADA
@@ -768,10 +788,22 @@ void GlobalControl::NPCrandomNumber(RE::Actor* targetActor, const std::string& e
         choices = availableMovesets;
     }
 
+   std::vector<double> weights;
+    weights.reserve(choices.size());
+    for (size_t i = 0; i < choices.size(); ++i) {
+        // Ex: Se houver 4 escolhas, os pesos serão 4, 3, 2, 1.
+        weights.push_back(static_cast<double>(choices.size() - i));
+    }
+
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<> distrib(0, static_cast<int>(choices.size() - 1));
-    int chosenPlaylistIndex = choices[distrib(gen)];
+
+    // PASSO 2: Configurar a distribuição ponderada (discreta) com base nos pesos.
+    std::discrete_distribution<> distrib(weights.begin(), weights.end());
+
+    // PASSO 3: Realizar o sorteio. O resultado será um ÍNDICE da lista `choices`.
+    int chosenListIndex = distrib(gen);
+    int chosenPlaylistIndex = choices[chosenListIndex];
 
     // Atualiza o estado e a variável do jogo
     targetActor->SetGraphVariableInt("testarone", chosenPlaylistIndex);

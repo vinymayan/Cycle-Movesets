@@ -241,7 +241,7 @@
             bool isDual;
             bool isShield;
             std::vector<std::string> keywords;
-            std::vector<std::string> leftHandKeywords;
+            std::vector<std::string> leftHandKeywords; 
         };
 
         std::vector<CategoryDefinition> categoryDefinitions = {
@@ -252,7 +252,7 @@
             {"Mace", 4.0, 0.0, false, false, {}, {}},
             {"Greatsword", 5.0, -1.0, false, false, {}, {}},
             {"Battleaxe", 6.0, -1.0, false, false, {}, {}},
-            {"Warhammer", 10.0, -1.0, false, false, {}, {}},
+            {"Warhammer", 10.0, -1.0, false, false, {"WeapTypeWarhammer"}, {}},
             // Shield
             //{"Shield", -1.0, 11.0, false, true, {}, {}},
             {"Sword & Shield", 1.0, 11.0, false, true, {}, {}},
@@ -261,7 +261,7 @@
             {"Mace & Shield", 4.0, 11.0, false, true, {}, {}},
             {"Greatsword & Shield", 5.0, 11.0, false, true, {}, {}},
             {"Battleaxe & Shield", 6.0, 11.0, false, true, {}, {}},
-            {"Warhammer & Shield", 10.0, 11.0, false, true, {}, {}},
+            {"Warhammer & Shield", 10.0, 11.0, false, true, {"WeapTypeWarhammer"}, {}},
             // Dual-Wield
             {"Dual Sword", 1.0, 1.0, true, {}, {}},
             {"Dual Dagger", 2.0, 2.0, true, {}, {}},
@@ -659,7 +659,7 @@
                                     ImGui::Checkbox("BR", &subInst.pBackRight);
                                     ImGui::SameLine();
                                     ImGui::Checkbox("BL", &subInst.pBackLeft);
-                                    ImGui::SameLine();
+                                    //ImGui::SameLine();
                                     //ImGui::Checkbox("Rnd", &subInst.pRandom);
                                     //ImGui::SameLine();
                                     //ImGui::Checkbox("Movement", &subInst.pDodge);
@@ -765,7 +765,7 @@
     const std::map<std::string, WeaponCategory>& AnimationManager::GetCategories() const { 
         return _categories; }
 
-    void AnimationManager::DrawCategoryUI(WeaponCategory& category) {
+void AnimationManager::DrawCategoryUI(WeaponCategory& category) {
         ImGui::PushID(category.name.c_str());
         if (ImGui::CollapsingHeader(category.name.c_str())) {
             ImGui::BeginGroup();
@@ -850,6 +850,7 @@
 
                                 for (size_t sub_j = 0; sub_j < modInstance.subAnimationInstances.size(); ++sub_j) {
                                     auto& subInstance = modInstance.subAnimationInstances[sub_j];
+                                    auto* currentSubInstancePtr = &subInstance;
                                     const auto& originMod = _allMods[subInstance.sourceModIndex];
                                     const auto& originSubAnim = originMod.subAnimations[subInstance.sourceSubAnimIndex];
 
@@ -869,37 +870,73 @@
 
                                     ImGui::BeginGroup();
 
-                                    std::string label;
-                                    if (modInstance.isSelected && subInstance.isSelected) {
-                                        if (playlistNumbers.count(&subInstance)) {
-                                            label = std::format("[{}] {}", playlistNumbers.at(&subInstance),
-                                                                originSubAnim.name);
-                                        } else if (parentNumbersForChildren.count(&subInstance)) {
-                                            int parentNum = parentNumbersForChildren.at(&subInstance);
-                                            label = std::format(" -> [{}] {}", parentNum, originSubAnim.name);
-                                        } else {
-                                            label = originSubAnim.name;
-                                        }
-                                    } else {
-                                        label = originSubAnim.name;
-                                    }
-                                    if (subInstance.sourceModIndex != modInstance.sourceModIndex) {
-                                        label += std::format(" (by: {})", originMod.name);
-                                    }
-
-                                    // ✅ **CORREÇÃO APLICADA AQUI**
                                     ImVec2 selectableSize;
                                     ImVec2 contentRegionAvail;
                                     ImGui::GetContentRegionAvail(&contentRegionAvail);
                                     selectableSize.x = contentRegionAvail.x * 0.5f;  // Metade do espaço restante
                                     selectableSize.y = ImGui::GetTextLineHeight();
-                                    ImGui::Selectable(label.c_str(), false, 0, selectableSize);
 
-                                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-                                        ImGui::SetDragDropPayload("DND_SUB_INSTANCE", &sub_j, sizeof(size_t));
-                                        ImGui::Text("Move %s", originSubAnim.name.c_str());
-                                        ImGui::EndDragDropSource();
+                                    if (_subInstanceBeingEdited == currentSubInstancePtr) {
+                                        ImGui::PushItemWidth(250);
+                                        ImGui::SetKeyboardFocusHere();  // Foco automático ao entrar no modo de edição
+                                        if (ImGui::InputText("##SubAnimNameEdit", subInstance.editedName.data(),
+                                                             subInstance.editedName.size(),
+                                                             ImGuiInputTextFlags_EnterReturnsTrue |
+                                                                 ImGuiInputTextFlags_AutoSelectAll)) {
+                                            _subInstanceBeingEdited =
+                                                nullptr;  // Sai do modo de edição ao pressionar Enter
+                                        }
+                                        // Sai do modo de edição se o campo perder o foco
+                                        if (ImGui::IsItemDeactivatedAfterEdit()) {
+                                            _subInstanceBeingEdited = nullptr;
+                                        }
+                                        ImGui::PopItemWidth();
+
+                                    } else {
+                                        // ============================ INÍCIO DA CORREÇÃO ============================
+
+                                        // Determina qual nome usar: o editado, ou o original se o editado estiver
+                                        // vazio.
+                                        const char* displayName = (subInstance.editedName[0] != '\0')
+                                                                      ? subInstance.editedName.data()
+                                                                      : originSubAnim.name.c_str();
+
+                                        // Constrói a label usando o 'displayName' correto.
+                                        std::string label = displayName;
+                                        if (modInstance.isSelected && subInstance.isSelected) {
+                                            if (playlistNumbers.count(&subInstance)) {
+                                                label = std::format("[{}] {}", playlistNumbers.at(&subInstance),
+                                                                    displayName);
+                                            } else if (parentNumbersForChildren.count(&subInstance)) {
+                                                label =
+                                                    std::format(" -> [{}] {}",
+                                                                parentNumbersForChildren.at(&subInstance), displayName);
+                                            }
+                                        }
+
+
+                                        // Desenha o texto selecionável
+                                        ImGui::Selectable(label.c_str(), false, 0,
+                                                          ImVec2(250, ImGui::GetTextLineHeight()));
+
+                                        // GATILHO DE EDIÇÃO AGORA É UM MENU DE CONTEXTO (CLIQUE DIREITO)
+                                        if (ImGui::BeginPopupContextItem("sub_anim_context_menu")) {
+                                            if (ImGui::MenuItem("Edit Name")) {
+                                                _subInstanceBeingEdited =
+                                                    currentSubInstancePtr;  // Ativa o modo de edição
+                                            }
+                                            ImGui::EndPopup();
+                                        }
+
+                                        // LÓGICA DE DRAG AND DROP (permanece no Selectable)
+                                        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                                            ImGui::SetDragDropPayload("DND_SUB_INSTANCE", &sub_j, sizeof(size_t));
+                                            ImGui::Text("Move %s", originSubAnim.name.c_str());
+                                            ImGui::EndDragDropSource();
+                                        }
                                     }
+
+                                    // O target do Drag and Drop pode ficar fora do if/else para funcionar sempre
                                     if (ImGui::BeginDragDropTarget()) {
                                         if (const ImGuiPayload* payload =
                                                 ImGui::AcceptDragDropPayload("DND_SUB_INSTANCE")) {
@@ -907,6 +944,14 @@
                                             std::swap(modInstance.subAnimationInstances[source_idx],
                                                       modInstance.subAnimationInstances[sub_j]);
                                         }
+                                        ImGui::EndDragDropTarget();
+                                    }
+
+                                    // Tooltip com o nome original (opcional, mas útil)
+                                    if (ImGui::IsItemHovered()) {
+                                        ImGui::SetTooltip(
+                                            "Original: %s\nRight-click to edit name.\nDrag n Drop to move place",
+                                            originSubAnim.name.c_str());
                                     }
 
                                     bool firstTag = true;
@@ -940,17 +985,16 @@
                                         const char* label;
                                         bool* value;
                                     };
-                                    std::vector<CheckboxInfo> checkboxes = {
-                                        {"F", &subInstance.pFront},
-                                        {"FR", &subInstance.pFrontRight},
-                                        {"FL", &subInstance.pFrontLeft},
-                                        {"R", &subInstance.pRight},
-                                        {"L", &subInstance.pLeft},        
-                                        {"B", &subInstance.pBack},
-                                        {"BR", &subInstance.pBackRight},  
-                                        {"BL", &subInstance.pBackLeft},
-                                        //{"Rnd", &subInstance.pRandom},    
-                                        {"Movement", &subInstance.pDodge}};
+                                    std::vector<CheckboxInfo> checkboxes = {{"F", &subInstance.pFront},
+                                                                            {"FR", &subInstance.pFrontRight},
+                                                                            {"FL", &subInstance.pFrontLeft},
+                                                                            {"R", &subInstance.pRight},
+                                                                            {"L", &subInstance.pLeft},
+                                                                            {"B", &subInstance.pBack},
+                                                                            {"BR", &subInstance.pBackRight},
+                                                                            {"BL", &subInstance.pBackLeft},
+                                                                            //{"Rnd", &subInstance.pRandom},
+                                                                            {"Movement", &subInstance.pDodge}};
 
                                     ImGui::GetContentRegionAvail(&contentRegionAvail);
                                     float availableWidth = contentRegionAvail.x;
@@ -1000,6 +1044,7 @@
                         }
                         ImGui::EndTabItem();
                     }
+                    
                 }
                 ImGui::EndTabBar();
             }
@@ -1277,7 +1322,7 @@ void AnimationManager::DrawNPCManager() {
     }
 
     // Helper para a UI de Categoria do NPC
-    void AnimationManager::DrawNPCCategoryUI(WeaponCategory& category) {
+void AnimationManager::DrawNPCCategoryUI(WeaponCategory& category) {
         ImGui::PushID(category.name.c_str());
         if (ImGui::CollapsingHeader(category.name.c_str())) {
             // NPCs usam a instância 0 (Stance 0)
@@ -1326,63 +1371,20 @@ void AnimationManager::DrawNPCManager() {
                     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle()->Colors[ImGuiCol_TextDisabled]);
                 }
 
+                ImGui::Columns(2, std::string("mod_instance_columns_" + std::to_string(mod_i)).c_str(), false);
+
+                ImGui::SetColumnWidth(0, ImGui::GetWindowWidth() * 0.57f);  // Coluna 1 usa 60% do espaço
+
+                // --- COLUNA 1: Controles e Nome do Moveset ---
                 if (ImGui::Button("X")) modInstanceToRemove = static_cast<int>(mod_i);
                 ImGui::SameLine();
                 ImGui::Checkbox("##modselect", &modInstance.isSelected);
                 ImGui::SameLine();
+
+                // O TreeNode agora está dentro de uma coluna, então sua largura é limitada.
                 bool node_open = ImGui::TreeNode(sourceMod.name.c_str());
 
-                // --- Lógica de Exibição e Edição de Condições (HP/Level) ---
-                ImGui::SameLine();
-                ImGui::Spacing();  // Adiciona um pequeno espaço
-                ImGui::SameLine();
-
-                // Se esta não é a instância que estamos editando, apenas mostre o texto
-                if (_instanceBeingEdited != &modInstance) {
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));  // Cor cinza para o texto
-                    std::string conditions_text =
-                        std::format("HP <= {}% | Lvl >= {}", modInstance.hp, modInstance.level);
-                    ImGui::TextUnformatted(conditions_text.c_str());
-                    ImGui::PopStyleColor();
-
-                    // Lógica de duplo-clique para iniciar a edição
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
-                        _instanceBeingEdited = &modInstance;
-                    }
-                    if (ImGui::IsItemHovered()) {
-                        ImGui::SetTooltip("Double-click to edit");
-                    }
-
-                } else {                       // Se ESTA é a instância que estamos editando, mostre os widgets de input
-                    ImGui::PushItemWidth(60);  // Define uma largura menor para os inputs
-                    bool enterPressed = false;
-
-                    ImGui::Text("HP <=");
-                    ImGui::SameLine();
-                    if (ImGui::InputInt("##hp_input", &modInstance.hp, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        enterPressed = true;
-                    }
-                    ImGui::SameLine();
-                    ImGui::Text("%% | Lvl >=");
-                    ImGui::SameLine();
-                    if (ImGui::InputInt("##level_input", &modInstance.level, 0, 0,
-                                        ImGuiInputTextFlags_EnterReturnsTrue)) {
-                        enterPressed = true;
-                    }
-                    ImGui::PopItemWidth();
-
-                    // Se o usuário pressionar Enter ou clicar fora dos inputs, para a edição
-                    if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
-                        // Garante que os valores fiquem dentro de um limite razoável
-                        if (modInstance.hp < 0) modInstance.hp = 0;
-                        if (modInstance.hp > 100) modInstance.hp = 100;
-                        if (modInstance.level < 0) modInstance.level = 0;
-
-                        _instanceBeingEdited = nullptr;  // Finaliza o modo de edição
-                    }
-                }
-
-                // --- PONTO 1: Adicionando Drag and Drop para os Movesets de NPC ---
+                // A lógica de Drag & Drop agora se aplica ao TreeNode, mas a área é limitada pela coluna.
                 if (ImGui::BeginDragDropSource()) {
                     ImGui::SetDragDropPayload("DND_MOD_INSTANCE_NPC", &mod_i, sizeof(size_t));
                     ImGui::Text("Move moveset %s", sourceMod.name.c_str());
@@ -1397,7 +1399,54 @@ void AnimationManager::DrawNPCManager() {
                     }
                     ImGui::EndDragDropTarget();
                 }
-                // --- FIM DO DRAG AND DROP ---
+
+                ImGui::NextColumn();  // Passa para a próxima coluna
+
+                if (_instanceBeingEdited == &modInstance) {
+                    // MODO DE EDIÇÃO: Mostra os campos de Input
+                    ImGui::PushItemWidth(60);  // Define uma largura pequena para cada campo
+                    ImGui::InputInt("Hp", &modInstance.hp, 0);
+                    ImGui::SameLine();
+                    ImGui::InputInt("St", &modInstance.st, 0);
+                    ImGui::SameLine();
+                    ImGui::InputInt("Mn", &modInstance.mn, 0);
+                    ImGui::SameLine();
+                    ImGui::InputInt("Lv", &modInstance.level, 0);
+                    ImGui::SameLine();
+                    ImGui::PopItemWidth();
+
+                    // Botão para salvar e sair do modo de edição
+                    if (ImGui::Button("OK")) {
+                        // Validação opcional dos dados antes de salvar
+                        modInstance.hp = std::clamp(modInstance.hp, 0, 100);
+                        modInstance.st = std::clamp(modInstance.st, 0, 100);
+                        modInstance.mn = std::clamp(modInstance.mn, 0, 100);
+                        if (modInstance.level < 0) modInstance.level = 0;
+
+                        _instanceBeingEdited = nullptr;  // Sai do modo de edição
+                    }
+
+                } else {
+                    // MODO DE VISUALIZAÇÃO: Mostra o texto
+                    std::string conditions_text =
+                        std::format("Hp <= {}% | St <= {}% | Mn <= {}% | Lv => {}", modInstance.hp, modInstance.st,
+                                    modInstance.mn, modInstance.level);
+
+                    ImGui::Selectable(conditions_text.c_str(), false, 0, ImVec2(0, ImGui::GetTextLineHeight()));
+
+                    // O menu de contexto ATIVA o modo de edição
+                    if (ImGui::BeginPopupContextItem("condition_context_menu")) {
+                        if (ImGui::MenuItem("Edit Conditions")) {
+                            _instanceBeingEdited = &modInstance;
+                        }
+                        ImGui::EndPopup();
+                    }
+
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Right-click to edit conditions");
+                    }
+                }
+                ImGui::Columns(1);
 
                 if (node_open) {
                     if (ImGui::Button(LOC("add_moveset"))) {
@@ -1498,7 +1547,7 @@ void AnimationManager::DrawNPCManager() {
             }
         }
         ImGui::PopID();
-    }
+}
 
 void AnimationManager::SaveAllSettings() {
         SKSE::log::info("Iniciando salvamento global de todas as configurações...");
@@ -2348,6 +2397,8 @@ void AnimationManager::SaveCycleMovesets() {
                                                        allocator);
                                 newStanceObj.AddMember("level", modInst.level, allocator);
                                 newStanceObj.AddMember("hp", modInst.hp, allocator);
+                                newStanceObj.AddMember("st", modInst.st, allocator);
+                                newStanceObj.AddMember("mn", modInst.mn, allocator);
 
                                 // <<< MUDANÇA PRINCIPAL: Usa o índice do loop (mod_idx) para definir a ordem
                                 // Adicionamos +1 porque a ordem no JSON deve começar em 1, não em 0.
@@ -2364,8 +2415,11 @@ void AnimationManager::SaveCycleMovesets() {
                             animObj.AddMember("index", animationIndexCounter++, allocator);
                             animObj.AddMember("sourceModName", rapidjson::Value(animOriginMod.name.c_str(), allocator),
                                               allocator);
-                            animObj.AddMember("sourceSubName", rapidjson::Value(animOriginSub.name.c_str(), allocator),
-                                              allocator);
+                            const char* nameToSave = (subInst.editedName[0] != '\0') ? subInst.editedName.data()
+                                                                                     : animOriginSub.name.c_str();
+
+
+                            animObj.AddMember("sourceSubName", rapidjson::Value(nameToSave, allocator), allocator);
                             animObj.AddMember("sourceConfigPath",
                                               rapidjson::Value(animOriginSub.path.string().c_str(), allocator),
                                               allocator);
@@ -2566,6 +2620,10 @@ void AnimationManager::LoadCycleMovesets() {
                                 modInstancePtr->level = stanceJson["level"].GetInt();
                             if (stanceJson.HasMember("hp") && stanceJson["hp"].IsInt())
                                 modInstancePtr->hp = stanceJson["hp"].GetInt();
+                            if (stanceJson.HasMember("st") && stanceJson["st"].IsInt())
+                                modInstancePtr->st = stanceJson["st"].GetInt();
+                            if (stanceJson.HasMember("mn") && stanceJson["mn"].IsInt())
+                                modInstancePtr->mn = stanceJson["mn"].GetInt();
                             if (stanceJson.HasMember("order") && stanceJson["order"].IsInt()) {
                                 modInstancePtr->order = stanceJson["order"].GetInt();
                             }
@@ -2573,32 +2631,47 @@ void AnimationManager::LoadCycleMovesets() {
                         // --- FIM DA LÓGICA DE AGRUPAMENTO ---
 
                         for (const auto& animJson : stanceJson["animations"].GetArray()) {
-                            if (!animJson.IsObject() || !animJson.HasMember("sourceModName") ||
-                                !animJson.HasMember("sourceSubName") ||
-                                !animJson.HasMember("index") ||  // <<< MUDANÇA: Verifica se o index existe
-                                !animJson["index"].IsInt())
+                            // Validação de campos essenciais. Agora, sourceConfigPath é o mais importante.
+                            if (!animJson.IsObject() || !animJson.HasMember("sourceConfigPath") ||
+                                !animJson.HasMember("index"))
                                 continue;
 
-                            // <<< MUDANÇA: Lê o índice do JSON
-                            int subAnimIndex = animJson["index"].GetInt();
-                            if (subAnimIndex < 1) continue;  // Índices devem ser 1 ou maiores
+                            // --- LÓGICA DE BUSCA MELHORADA ---
 
-                            SubAnimationInstance newSubInstance;
-                            auto subModIdxOpt = FindModIndexByName(animJson["sourceModName"].GetString());
-                            if (subModIdxOpt) {
-                                newSubInstance.sourceModIndex = *subModIdxOpt;
-                                auto subAnimIdxOpt =
-                                    FindSubAnimIndexByName(*subModIdxOpt, animJson["sourceSubName"].GetString());
-                                if (subAnimIdxOpt) {
-                                    newSubInstance.sourceSubAnimIndex = *subAnimIdxOpt;
-                                } else {
-                                    continue;
-                                }
-                            } else {
+                            std::string configPathStr = animJson["sourceConfigPath"].GetString();
+                            if (configPathStr.empty()) {
+                                SKSE::log::warn("Encontrada entrada de animação com sourceConfigPath vazio. Pulando.");
                                 continue;
                             }
 
-                            // (lógica para preencher as flags pFront, pBack, etc. permanece a mesma)
+                            // Busca a animação usando o caminho como ID único
+                            auto indicesOpt = FindSubAnimationByPath(configPathStr);
+
+                            if (!indicesOpt) {
+                                SKSE::log::warn(
+                                    "Não foi possível encontrar a animação para o config: {}. Pode ter sido removida. "
+                                    "Pulando.",
+                                    configPathStr);
+                                continue;  // Pula esta animação se o arquivo de configuração não pôde ser encontrado
+                            }
+
+                            SubAnimationInstance newSubInstance;
+                            newSubInstance.sourceModIndex = indicesOpt->first;       // Índice do Mod
+                            newSubInstance.sourceSubAnimIndex = indicesOpt->second;  // Índice da Sub-Animação
+                            if (animJson.HasMember("sourceSubName") && animJson["sourceSubName"].IsString()) {
+                                const char* savedName = animJson["sourceSubName"].GetString();
+                                const auto& originSubAnim = _allMods[newSubInstance.sourceModIndex]
+                                                                .subAnimations[newSubInstance.sourceSubAnimIndex];
+                                if (strcmp(savedName, originSubAnim.name.c_str()) != 0) {
+                                    // Copia o nome salvo para o buffer da nova instância.
+                                    strcpy_s(newSubInstance.editedName.data(), newSubInstance.editedName.size(),
+                                             savedName);
+                                }
+                            }
+
+                            // --- FIM DA LÓGICA DE BUSCA MELHORADA ---
+
+                            // (A lógica para preencher as flags pFront, pBack, etc. permanece a mesma)
                             if (animJson.HasMember("pFront")) newSubInstance.pFront = animJson["pFront"].GetBool();
                             if (animJson.HasMember("pBack")) newSubInstance.pBack = animJson["pBack"].GetBool();
                             if (animJson.HasMember("pLeft")) newSubInstance.pLeft = animJson["pLeft"].GetBool();
@@ -2614,12 +2687,14 @@ void AnimationManager::LoadCycleMovesets() {
                             if (animJson.HasMember("pRandom")) newSubInstance.pRandom = animJson["pRandom"].GetBool();
                             if (animJson.HasMember("pDodge")) newSubInstance.pDodge = animJson["pDodge"].GetBool();
 
-                            // <<< MUDANÇA: Lógica para inserir na posição correta
-                            // Garante que o vetor tenha espaço suficiente para o novo índice
+                            newSubInstance.isSelected = true;  // Se está no arquivo, estava selecionada.
+
+                            // (A lógica para inserir na posição correta via "index" permanece a mesma)
+                            int subAnimIndex = animJson["index"].GetInt();
+                            if (subAnimIndex < 1) continue;
                             if (modInstancePtr->subAnimationInstances.size() < subAnimIndex) {
                                 modInstancePtr->subAnimationInstances.resize(subAnimIndex);
                             }
-                            // Insere o objeto na posição correta (index - 1 para converter para base 0)
                             modInstancePtr->subAnimationInstances[subAnimIndex - 1] = newSubInstance;
                         }
                     }
@@ -2629,18 +2704,28 @@ void AnimationManager::LoadCycleMovesets() {
 
         // 1º Passe: Procurar por User_CycleMoveset.json
         for (const auto& entry : std::filesystem::recursive_directory_iterator(oarRootPath)) {
-            if (entry.is_regular_file() && entry.path().filename() == "User_CycleMoveset.json") {
-                processJsonFile(entry.path());
-                processedFolders.insert(entry.path().parent_path());
-            }
-        }
+            // Iremos procurar apenas por pastas que contenham um config.json, que definem um sub-moveset.
+            if (entry.is_regular_file() && entry.path().filename() == "config.json") {
+                std::filesystem::path currentFolder = entry.path().parent_path();
 
-        // 2º Passe: Procurar por CycleMoveset.json (fallback)
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(oarRootPath)) {
-            if (entry.is_regular_file() && entry.path().filename() == "CycleMoveset.json") {
-                if (processedFolders.find(entry.path().parent_path()) == processedFolders.end()) {
-                    // Apenas processa se um User_ file não foi encontrado na mesma pasta
-                    processJsonFile(entry.path());
+                std::filesystem::path userFile = currentFolder / "User_CycleMoveset.json";
+                std::filesystem::path defaultFile = currentFolder / "CycleMoveset.json";
+
+                bool userFileExists = std::filesystem::exists(userFile);
+
+                // Cenário 1: User_CycleMoveset.json existe.
+                if (userFileExists) {
+                    // Tentamos processá-lo. A função retorna `true` se tiver conteúdo e for processado.
+                    // Se o arquivo existir mas estiver vazio ou mal-formado, a função retorna `false`
+                    // e nós NÃO tentamos carregar o arquivo de fallback, respeitando a intenção do usuário.
+                    processJsonFile(userFile);
+                }
+                // Cenário 2: User_CycleMoveset.json NÃO existe.
+                else {
+                    // Procuramos pelo arquivo de fallback.
+                    if (std::filesystem::exists(defaultFile)) {
+                        processJsonFile(defaultFile);
+                    }
                 }
             }
         }
@@ -2777,99 +2862,88 @@ void AnimationManager::LoadCycleMovesets() {
     }
 
     // Função para buscar o nome do moveset
-    std::string AnimationManager::GetCurrentMovesetName(const std::string& categoryName, int stanceIndex, int movesetIndex,
-                                                        int directionalState) {
-
-        // <--- LOG 1: Entrada da Função ---
-        //SKSE::log::info("[GetCurrentMovesetName] Buscando: Cat='{}', Stance={}, MovesetIdx={}, DirState={}", categoryName,stanceIndex, movesetIndex, directionalState);
-
+    std::string AnimationManager::GetCurrentMovesetName(const std::string& categoryName, int stanceIndex,
+                                                        int movesetIndex, int directionalState) {
+        //SKSE::log::info("==========================================================");
+        //SKSE::log::info("[GetCurrentMovesetName] Invocado com: Categoria='{}', Stance={}, MovesetIndex={}, Direcao={}",categoryName, stanceIndex, movesetIndex, directionalState);
         if (movesetIndex <= 0) {
             return "Nenhum";
         }
 
-        auto it = _categories.find(categoryName);
-        if (it == _categories.end()) {
+        auto cat_it = _categories.find(categoryName);
+        if (cat_it == _categories.end()) {
             return "Categoria não encontrada";
         }
 
-        WeaponCategory& category = it->second;
+        WeaponCategory& category = cat_it->second;
         if (stanceIndex < 0 || stanceIndex >= 4) {
             return "Stance inválida";
         }
 
         CategoryInstance& instance = category.instances[stanceIndex];
-        // --- PASSO 1: Encontrar o nome do PAI (fallback) ---
-        std::string parentSubmovesetName = "Não encontrado";
+
         int parentCounter = 0;
+        const SubAnimationInstance* targetParent = nullptr;
+
         for (auto& modInst : instance.modInstances) {
             if (!modInst.isSelected) continue;
             for (auto& subInst : modInst.subAnimationInstances) {
                 if (!subInst.isSelected) continue;
-                // --- INÍCIO DA NOVA VERIFICAÇÃO (idêntica à anterior) ---
+
                 const auto& sourceSubAnim = _allMods[subInst.sourceModIndex].subAnimations[subInst.sourceSubAnimIndex];
                 if (!sourceSubAnim.hasAnimations) {
-                    continue;  // PULA este sub-moveset se ele não tiver animações .hkx
+                    continue;
                 }
-                // --- FIM DA NOVA VERIFICAÇÃO ---
-                bool isParent =
-                    !(subInst.pFront || subInst.pBack || subInst.pLeft || subInst.pRight || subInst.pFrontRight ||
-                      subInst.pFrontLeft || subInst.pBackRight || subInst.pBackLeft || subInst.pRandom || subInst.pDodge);
+
+                bool isParent = !(subInst.pFront || subInst.pBack || subInst.pLeft || subInst.pRight ||
+                                  subInst.pFrontRight || subInst.pFrontLeft || subInst.pBackRight ||
+                                  subInst.pBackLeft || subInst.pRandom || subInst.pDodge);
 
                 if (isParent) {
                     parentCounter++;
                     if (parentCounter == movesetIndex) {
-                        const auto& sourceSubAnimParent =
+                        targetParent = &subInst;
+                        // Se não for necessária uma direção, já encontramos o que queríamos.
+                        if (directionalState == 0) {
+                            goto found_target;
+                        }
+                        // Caso contrário, continuamos escaneando em busca de filhos.
+                    } else if (targetParent != nullptr) {
+                        // Se já passamos pelo nosso "pai" alvo e encontramos o PRÓXIMO "pai",
+                        // significa que não havia um filho direcional válido no meio. Paramos a busca.
+                        goto found_target;
+                    }
+                } else if (targetParent != nullptr && directionalState != 0) {
+                    // Se estamos nesta parte, significa que encontramos uma animação "filha" E
+                    // já passamos pelo "pai" que estávamos procurando.
+                    bool isDirectionalMatch =
+                        (directionalState == 1 && subInst.pFront) || (directionalState == 2 && subInst.pFrontRight) ||
+                        (directionalState == 3 && subInst.pRight) || (directionalState == 4 && subInst.pBackRight) ||
+                        (directionalState == 5 && subInst.pBack) || (directionalState == 6 && subInst.pBackLeft) ||
+                        (directionalState == 7 && subInst.pLeft) || (directionalState == 8 && subInst.pFrontLeft);
+
+                    if (isDirectionalMatch) {
+                        // Encontramos o filho direcional que corresponde ao nosso pai! Este é o resultado final.
+                        const auto& sourceSubAnimChild =
                             _allMods[subInst.sourceModIndex].subAnimations[subInst.sourceSubAnimIndex];
-                        parentSubmovesetName = sourceSubAnimParent.name;
-                        //SKSE::log::info("  -> Pai #{} encontrado: '{}'.", movesetIndex, parentSubmovesetName);
-                        goto found_parent;  // Pula para fora dos loops aninhados
+                        return (subInst.editedName[0] != '\0') ? subInst.editedName.data() : sourceSubAnimChild.name;
                     }
                 }
             }
         }
 
-    found_parent:
-        // Se não encontrou o pai ou não há direção, retorna o que encontrou até agora.
-        if (parentSubmovesetName == "Não encontrado" || directionalState == 0) {
-            if (parentSubmovesetName == "Não encontrado") {
-                SKSE::log::warn("[GetCurrentMovesetName] Nenhum moveset encontrado para o índice {}", movesetIndex);
-            }
-            return parentSubmovesetName;
+    found_target:
+        // Se chegamos aqui, ou encontramos o pai e não precisávamos de direção, ou não encontramos um filho válido.
+        // Em ambos os casos, retornamos o nome do pai.
+        if (targetParent) {
+            const auto& sourceSubAnimParent =
+                _allMods[targetParent->sourceModIndex].subAnimations[targetParent->sourceSubAnimIndex];
+            return (targetParent->editedName[0] != '\0') ? targetParent->editedName.data() : sourceSubAnimParent.name;
         }
 
-        // --- PASSO 2: Procurar por um FILHO DIRECIONAL em TODOS os pacotes de moveset da stance ---
-        SKSE::log::info("  -> Procurando por filho direcional em todos os pacotes...");
-        for (auto& modInst : instance.modInstances) {
-            if (!modInst.isSelected) continue;
-            for (auto& childSubInst : modInst.subAnimationInstances) {
-                if (!childSubInst.isSelected) continue;
-
-                // Log de verificação (pode ser comentado depois de funcionar)
-                /*SKSE::log::info("    -- Verificando filho: '{}' [F:{}, B:{}, L:{}, R:{}, FR:{}, FL:{}, BR:{}, BL:{}]",
-                                _allMods[childSubInst.sourceModIndex].subAnimations[childSubInst.sourceSubAnimIndex].name,
-                                childSubInst.pFront, childSubInst.pBack, childSubInst.pLeft, childSubInst.pRight,
-                                childSubInst.pFrontRight, childSubInst.pFrontLeft, childSubInst.pBackRight,
-                                childSubInst.pBackLeft);*/
-
-                bool isDirectionalMatch =
-                    (directionalState == 1 && childSubInst.pFront) || (directionalState == 2 && childSubInst.pFrontRight) ||
-                    (directionalState == 3 && childSubInst.pRight) || (directionalState == 4 && childSubInst.pBackRight) ||
-                    (directionalState == 5 && childSubInst.pBack) || (directionalState == 6 && childSubInst.pBackLeft) ||
-                    (directionalState == 7 && childSubInst.pLeft) || (directionalState == 8 && childSubInst.pFrontLeft);
-
-                if (isDirectionalMatch) {
-                    const auto& sourceSubAnimChild =
-                        _allMods[childSubInst.sourceModIndex].subAnimations[childSubInst.sourceSubAnimIndex];
-                    SKSE::log::info("      ==> MATCH ENCONTRADO! Retornando nome do filho: {}", sourceSubAnimChild.name);
-                    return sourceSubAnimChild.name;
-                }
-            }
-        }
-
-        // Se nenhum filho foi encontrado em nenhum pacote, retorna o nome do pai
-        SKSE::log::info("  -> Nenhum filho direcional correspondeu em nenhum pacote. Retornando nome do pai: {}",
-                        parentSubmovesetName);
-        return parentSubmovesetName;
+        // Se a função terminar aqui, o movesetIndex era inválido (ex: pediu o 5º pai, mas só existem 4).
+        //SKSE::log::warn("[GetCurrentMovesetName] Nenhum moveset 'pai' encontrado para o índice {}", movesetIndex);
+        return "Não encontrado";
     }
 
 
@@ -3265,6 +3339,8 @@ void AnimationManager::LoadCycleMovesets() {
                         newStanceObj.AddMember("name", rapidjson::Value(movesetName.c_str(), allocator), allocator);
                         newStanceObj.AddMember("level", 0, allocator);
                         newStanceObj.AddMember("hp", 100, allocator);
+                        newStanceObj.AddMember("st", 100, allocator);
+                        newStanceObj.AddMember("mn", 100, allocator);
                         newStanceObj.AddMember("order", 1, allocator);
 
                         rapidjson::Value animationsArray(rapidjson::kArrayType);
@@ -3725,12 +3801,10 @@ void AnimationManager::LoadCycleMovesets() {
 
             // --- Campos do formulário ---
             ImGui::InputText("Category Name", _newCategoryNameBuffer, sizeof(_newCategoryNameBuffer));
-
-            // CORREÇÃO PONTO 1: O combo da arma base agora aparece mesmo se "Shield" estiver marcado
             ImGui::Combo("Base Weapon (Right Hand)", &_newCategoryBaseIndex, baseCategoryNames.data(),
                          baseCategoryNames.size());
-
-            ImGui::InputText("Keywords (comma-separated)", _newCategoryKeywordsBuffer, sizeof(_newCategoryKeywordsBuffer));
+            ImGui::InputText("Keywords (comma-separated)", _newCategoryKeywordsBuffer,
+                             sizeof(_newCategoryKeywordsBuffer));
 
             if (ImGui::Checkbox("Is Dual Wield", &_newCategoryIsDual)) {
                 if (_newCategoryIsDual) _newCategoryIsShield = false;
@@ -3743,109 +3817,138 @@ void AnimationManager::LoadCycleMovesets() {
             if (_newCategoryIsDual) {
                 ImGui::Separator();
                 ImGui::Text("Dual Wield Options");
-                ImGui::Combo("Base Weapon (Left Hand)", &_newCategoryLeftHandBaseIndex, dualCategoryNames.data(),
-                             dualCategoryNames.size());
+                ImGui::Combo("Base Weapon (Left Hand)", &_newCategoryLeftHandBaseIndex, baseCategoryNames.data(),
+                             baseCategoryNames.size());
                 ImGui::InputText("Left Hand Keywords", _newCategoryLeftHandKeywordsBuffer,
                                  sizeof(_newCategoryLeftHandKeywordsBuffer));
             }
             ImGui::Separator();
 
-            // --- Lógica de Salvamento (Unificada) ---
+            // ============================ INÍCIO DA LÓGICA DE SALVAMENTO CORRIGIDA ============================
             const char* saveButtonText = LOC("save");
             if (ImGui::Button(saveButtonText, ImVec2(120, 0))) {
                 std::string newName = _newCategoryNameBuffer;
-                std::string originalName = isEditing ? _originalCategoryName : "";  // Usamos o buffer do nome original
 
-                // Validação básica
-                if (newName.empty() || (newName != originalName && _categories.count(newName))) {
+                // Validação unificada: checa se o nome está vazio ou se já existe (considerando se é edição ou criação)
+                if (newName.empty() || (!isEditing && _categories.count(newName)) ||
+                    (isEditing && newName != _originalCategoryName && _categories.count(newName))) {
                     RE::DebugNotification("ERROR: Category name cannot be empty or already exists!");
                 } else {
-                    bool nameChanged = isEditing && (newName != originalName);
+                    // --- CAMINHO DE EDIÇÃO ---
+                    if (isEditing) {
+                        std::string originalName = _originalCategoryName;
+                        bool nameChanged = (newName != originalName);
 
-                    // --- ETAPA 1: SE O NOME MUDOU, RENOMEAR ARQUIVOS E MOVER OBJETOS ---
-                    if (nameChanged) {
-                        // --- 1.1: Renomear arquivos de configuração no disco ---
-                        try {
-                            const std::filesystem::path categoriesPath = "Data/SKSE/Plugins/CycleMovesets/Categories";
-                            const std::filesystem::path stancesPath = "Data/SKSE/Plugins/CycleMovesets/Stances";
+                        if (nameChanged) {
+                            // 1. Renomear arquivos de configuração
+                            try {
+                                const std::filesystem::path categoriesPath =
+                                    "Data/SKSE/Plugins/CycleMovesets/Categories";
+                                const std::filesystem::path stancesPath = "Data/SKSE/Plugins/CycleMovesets/Stances";
 
-                            std::filesystem::path oldCatFile = categoriesPath / (originalName + ".json");
-                            std::filesystem::path newCatFile = categoriesPath / (newName + ".json");
-                            std::filesystem::path oldStanceFile = stancesPath / (originalName + ".json");
-                            std::filesystem::path newStanceFile = stancesPath / (newName + ".json");
+                                std::filesystem::path oldCatFile = categoriesPath / (originalName + ".json");
+                                if (std::filesystem::exists(oldCatFile)) {
+                                    std::filesystem::rename(oldCatFile, categoriesPath / (newName + ".json"));
+                                }
 
-                            if (std::filesystem::exists(oldCatFile)) {
-                                std::filesystem::rename(oldCatFile, newCatFile);
+                                std::filesystem::path oldStanceFile = stancesPath / (originalName + ".json");
+                                if (std::filesystem::exists(oldStanceFile)) {
+                                    std::filesystem::rename(oldStanceFile, stancesPath / (newName + ".json"));
+                                }
+                            } catch (const std::filesystem::filesystem_error& e) {
+                                SKSE::log::error("Falha ao renomear arquivos da categoria '{}': {}", originalName,
+                                                 e.what());
                             }
-                            if (std::filesystem::exists(oldStanceFile)) {
-                                std::filesystem::rename(oldStanceFile, newStanceFile);
+
+                            // 2. Mover o objeto em memória para a nova chave (preserva movesets e stances)
+                            auto nodeHandle = _categories.extract(originalName);
+                            if (!nodeHandle.empty()) {
+                                nodeHandle.key() = newName;
+                                nodeHandle.mapped().name = newName;
+                                _categories.insert(std::move(nodeHandle));
                             }
-                        } catch (const std::filesystem::filesystem_error& e) {
-                            SKSE::log::error("Falha ao renomear arquivos da categoria '{}': {}", originalName,
-                                             e.what());
+                            auto npcNodeHandle = _npcCategories.extract(originalName);
+                            if (!npcNodeHandle.empty()) {
+                                npcNodeHandle.key() = newName;
+                                npcNodeHandle.mapped().name = newName;
+                                _npcCategories.insert(std::move(npcNodeHandle));
+                            }
                         }
 
-                        // --- 1.2: Mover o objeto da categoria em memória (preserva movesets e stances) ---
-                        // Para _categories
-                        auto nodeHandle = _categories.extract(originalName);
-                        if (!nodeHandle.empty()) {
-                            nodeHandle.key() = newName;
-                            nodeHandle.mapped().name = newName;  // Atualiza o nome dentro do próprio objeto
-                            _categories.insert(std::move(nodeHandle));
+                        // 3. Atualizar as propriedades da categoria (que agora está no nome correto)
+                        WeaponCategory& catToUpdate =
+                            _categories.at(newName);  // .at() é seguro aqui pois o objeto já existe
+                        catToUpdate.isDualWield = _newCategoryIsDual;
+                        catToUpdate.isShieldCategory = _newCategoryIsShield;
+                        const WeaponCategory* baseCat = baseCategoryPtrs[_newCategoryBaseIndex];
+                        catToUpdate.baseCategoryName = baseCat->name;
+                        catToUpdate.keywords = SplitKeywords(_newCategoryKeywordsBuffer);
+
+                        if (catToUpdate.isShieldCategory) {
+                            catToUpdate.equippedTypeValue = baseCat->equippedTypeValue;
+                            catToUpdate.leftHandEquippedTypeValue = 11.0;
+                        } else if (catToUpdate.isDualWield) {
+                            const WeaponCategory* leftBaseCat = dualCategoryPtrs[_newCategoryLeftHandBaseIndex];
+                            catToUpdate.equippedTypeValue = baseCat->equippedTypeValue;
+                            catToUpdate.leftHandEquippedTypeValue = leftBaseCat->equippedTypeValue;
+                            catToUpdate.leftHandKeywords = SplitKeywords(_newCategoryLeftHandKeywordsBuffer);
+                        } else {
+                            catToUpdate.equippedTypeValue = baseCat->equippedTypeValue;
+                            catToUpdate.leftHandEquippedTypeValue = baseCat->leftHandEquippedTypeValue;
                         }
-                        // Para _npcCategories
-                        auto npcNodeHandle = _npcCategories.extract(originalName);
-                        if (!npcNodeHandle.empty()) {
-                            npcNodeHandle.key() = newName;
-                            npcNodeHandle.mapped().name = newName;
-                            _npcCategories.insert(std::move(npcNodeHandle));
-                        }
-                    }
 
-                    // --- ETAPA 2: ATUALIZAR OS DADOS DA CATEGORIA (NOVA OU JÁ RENOMEADA) ---
-                    WeaponCategory& catToUpdate =
-                        _categories.at(newName);  // Acessa a categoria (agora com o nome correto)
-                    catToUpdate.isCustom = true;
-                    catToUpdate.isDualWield = _newCategoryIsDual;
-                    catToUpdate.isShieldCategory = _newCategoryIsShield;
+                        // Sincronizar com NPCs
+                        _npcCategories.at(newName) = catToUpdate;
 
-                    const WeaponCategory* baseCat = baseCategoryPtrs[_newCategoryBaseIndex];
-                    catToUpdate.baseCategoryName = baseCat->name;
-                    catToUpdate.keywords = SplitKeywords(_newCategoryKeywordsBuffer);
-
-                    if (catToUpdate.isShieldCategory) {
-                        catToUpdate.equippedTypeValue = baseCat->equippedTypeValue;
-                        catToUpdate.leftHandEquippedTypeValue = 11.0;  // Valor fixo para escudo
-                    } else if (catToUpdate.isDualWield) {
-                        const WeaponCategory* leftBaseCat = dualCategoryPtrs[_newCategoryLeftHandBaseIndex];
-                        catToUpdate.equippedTypeValue = baseCat->equippedTypeValue;
-                        catToUpdate.leftHandEquippedTypeValue = leftBaseCat->equippedTypeValue;
-                        catToUpdate.leftHandKeywords = SplitKeywords(_newCategoryLeftHandKeywordsBuffer);
+                        // --- CAMINHO DE CRIAÇÃO (A CORREÇÃO PRINCIPAL) ---
                     } else {
-                        catToUpdate.equippedTypeValue = baseCat->equippedTypeValue;
-                        catToUpdate.leftHandEquippedTypeValue = baseCat->leftHandEquippedTypeValue;
-                    }
+                        // 1. Criar a nova categoria usando o operador []
+                        WeaponCategory& newCat = _categories[newName];  // <--- CORREÇÃO: Usa [] para criar
+                        newCat.name = newName;
+                        newCat.isCustom = true;
+                        newCat.isDualWield = _newCategoryIsDual;
+                        newCat.isShieldCategory = _newCategoryIsShield;
 
-                    // Se for uma categoria totalmente nova, inicializa os nomes das stances
-                    if (!isEditing) {
+                        // 2. Popular todas as propriedades da categoria recém-criada
+                        const WeaponCategory* baseCat = baseCategoryPtrs[_newCategoryBaseIndex];
+                        newCat.baseCategoryName = baseCat->name;
+                        newCat.keywords = SplitKeywords(_newCategoryKeywordsBuffer);
+
+                        if (newCat.isShieldCategory) {
+                            newCat.equippedTypeValue = baseCat->equippedTypeValue;
+                            newCat.leftHandEquippedTypeValue = 11.0;
+                        } else if (newCat.isDualWield) {
+                            const WeaponCategory* leftBaseCat = dualCategoryPtrs[_newCategoryLeftHandBaseIndex];
+                            newCat.equippedTypeValue = baseCat->equippedTypeValue;
+                            newCat.leftHandEquippedTypeValue = leftBaseCat->equippedTypeValue;
+                            newCat.leftHandKeywords = SplitKeywords(_newCategoryLeftHandKeywordsBuffer);
+                        } else {
+                            newCat.equippedTypeValue = baseCat->equippedTypeValue;
+                            newCat.leftHandEquippedTypeValue = baseCat->leftHandEquippedTypeValue;
+                        }
+
+                        // 3. Inicializar os nomes padrão das stances para a nova categoria
                         for (int i = 0; i < 4; ++i) {
                             std::string defaultName = std::format("Stance {}", i + 1);
-                            catToUpdate.stanceNames[i] = defaultName;
-                            strcpy_s(catToUpdate.stanceNameBuffers[i].data(), catToUpdate.stanceNameBuffers[i].size(),
+                            newCat.stanceNames[i] = defaultName;
+                            strcpy_s(newCat.stanceNameBuffers[i].data(), newCat.stanceNameBuffers[i].size(),
                                      defaultName.c_str());
                         }
+
+                        // 4. Sincronizar a nova categoria com a lista de NPCs
+                        _npcCategories[newName] = newCat;
                     }
 
-                    // Sincroniza a cópia da categoria para a lista de NPCs
-                    _npcCategories[newName] = catToUpdate;
-
+                    // Finaliza e fecha o modal
                     _categoryToEditPtr = nullptr;
                     ImGui::CloseCurrentPopup();
                 }
             }
+            // ============================ FIM DA LÓGICA DE SALVAMENTO CORRIGIDA ============================
+
             ImGui::SameLine();
             if (ImGui::Button(LOC("close"), ImVec2(120, 0))) {
-                _categoryToEditPtr = nullptr;  // Reseta o ponteiro de edição
+                _categoryToEditPtr = nullptr;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
@@ -3858,6 +3961,18 @@ void AnimationManager::LoadCycleMovesets() {
     }
 
     void AnimationManager::DrawCategoryManager() {
+        bool isEditing = (_categoryToEditPtr != nullptr);
+        const char* popupTitle = isEditing ? "Edit Custom Category" : "Create New Category";
+
+        if (_isCreateCategoryModalOpen) {
+            ImGui::OpenPopup(popupTitle);
+            _isCreateCategoryModalOpen = false;
+        }
+
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImVec2 center = ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f, viewport->Pos.y + viewport->Size.y * 0.5f);
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
         if (ImGui::Button("Create New Category")) {
             _categoryToEditPtr = nullptr;  // Garante que estamos no modo de criação
             // Limpa os buffers para um formulário novo
@@ -4574,32 +4689,49 @@ void AnimationManager::LoadGameDataForNpcRules() {
         // Evita divisão por zero se o ator tiver 0 de vida máxima por algum motivo
         float hpPercent = (maxHealth > 0) ? (currentHealth / maxHealth) * 100.0f : 0.0f;
         int level = actor->GetLevel();
-        // Futuramente, adicione aqui:
-        // float staminaPercent = actor->GetActorValuePercentage(RE::ActorValue::kStamina) * 100.0f;
-        // float magickaPercent = actor->GetActorValuePercentage(RE::ActorValue::kMagicka) * 100.0f;
-        //SKSE::log::info("[GetAvailableIndices] Status atuais do ator -> HP: {:.2f} ({:.2f}/{:.2f}), Nível: {}",hpPercent, currentHealth, maxHealth, level);
-        std::vector<int> availableIndices;
-        int currentPlaylistIndex = 1;  // OAR começa a contagem em 1
 
-        // 4. Itera sobre todos os movesets configurados e filtra
+        float currentStamina = actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kStamina);
+        float maxStamina = actor->GetActorValueMax(RE::ActorValue::kStamina);
+        float stPercent = (maxStamina > 0) ? (currentStamina / maxStamina) * 100.0f : 0.0f;
+        float currentMagicka = actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kMagicka);
+        float maxMagicka = actor->GetActorValueMax(RE::ActorValue::kMagicka);
+        float mkPercent = (maxMagicka > 0) ? (currentMagicka / maxMagicka) * 100.0f : 0.0f;
+
+        //SKSE::log::info("[GetAvailableIndices] Status atuais do ator -> HP: {:.2f} ({:.2f}/{:.2f}), Nível: {}",hpPercent, currentHealth, maxHealth, level);
+        std::vector<ScoredIndex> scoredCandidates;
+        int currentPlaylistIndex = 1;
+
         for (const auto& modInst : instance.modInstances) {
             if (modInst.isSelected) {
-                const auto& sourceMod = _allMods[modInst.sourceModIndex];
-                //SKSE::log::info("  -> Checando moveset #{}: '{}'", currentPlaylistIndex, sourceMod.name);
-
-                // 5. AQUI ESTÁ A MÁGICA: Verifica as condições
-                bool conditionsMet = (hpPercent <= modInst.hp && level >= modInst.level);
-                // Futuramente, adicione aqui:
-                // && staminaPercent <= modInst.stamina && magickaPercent <= modInst.magicka
-                //SKSE::log::info("     Condição: (HP {:.2f} <= {} && Nível {} >= {}) -> Resultado: {}", hpPercent,modInst.hp, level, modInst.level, conditionsMet ? "VÁLIDO" : "INVÁLIDO");
+                // Verifica se as condições são atendidas
+                bool conditionsMet = (hpPercent <= modInst.hp && level >= modInst.level && stPercent <= modInst.st &&
+                                      mkPercent <= modInst.mn);
 
                 if (conditionsMet) {
-                    // Este moveset é válido! Adiciona seu número de playlist à lista.
-                    availableIndices.push_back(currentPlaylistIndex);
-                }
+                    // PASSO 2: Calcular o "Score de Proximidade"
+                    // O score é a "distância" total das condições. Quanto menor, melhor.
+                    float hp_distance = modInst.hp - hpPercent;  // Ex: Se HP é 40 e a condição é 50, a distância é 10.
+                    float level_distance =
+                        level - modInst.level;  // Ex: Se Lvl é 20 e a condição é 15, a distância é 5.
+                    float st_distance = modInst.st - stPercent;
+                    float mn_distance = modInst.mn - mkPercent;
 
+                    float totalScore = hp_distance + level_distance + st_distance + mn_distance;
+
+                    scoredCandidates.push_back({currentPlaylistIndex, totalScore});
+                }
                 currentPlaylistIndex++;
             }
+        }
+
+        // PASSO 3: Ordenar os candidatos pelo score (do menor para o maior)
+        std::sort(scoredCandidates.begin(), scoredCandidates.end());
+
+        // PASSO 4: Extrair apenas os índices ordenados para o resultado final
+        std::vector<int> availableIndices;
+        availableIndices.reserve(scoredCandidates.size());
+        for (const auto& candidate : scoredCandidates) {
+            availableIndices.push_back(candidate.index);
         }
 
         // Log final com a lista de resultados
@@ -4620,4 +4752,18 @@ void AnimationManager::LoadGameDataForNpcRules() {
         keyLeft = static_cast<uint32_t>(Settings::keyLeft_k);
         keyRight = static_cast<uint32_t>(Settings::keyRight_k);
         SKSE::log::info("Teclas de movimento sincronizadas para o runtime.");
+    }
+
+    std::optional<std::pair<size_t, size_t>> AnimationManager::FindSubAnimationByPath(
+        const std::filesystem::path& configPath) {
+        for (size_t modIdx = 0; modIdx < _allMods.size(); ++modIdx) {
+            const auto& mod = _allMods[modIdx];
+            for (size_t subIdx = 0; subIdx < mod.subAnimations.size(); ++subIdx) {
+                // Compara os caminhos canônicos para garantir consistência (ignora diferenças como / vs \)
+                if (std::filesystem::equivalent(mod.subAnimations[subIdx].path, configPath)) {
+                    return std::make_pair(modIdx, subIdx);
+                }
+            }
+        }
+        return std::nullopt;  // Não encontrado
     }
