@@ -2492,8 +2492,6 @@ void AnimationManager::SaveCycleMovesets() {
     }
 
 
-
-
 void AnimationManager::LoadCycleMovesets() {
         SKSE::log::info("Iniciando carregamento de regras dos arquivos (User_)CycleMoveset.json...");
 
@@ -2603,8 +2601,16 @@ void AnimationManager::LoadCycleMovesets() {
 
                         // --- LÓGICA DE AGRUPAMENTO RESTAURADA ---
                         ModInstance* modInstancePtr = nullptr;
+                        int hp = stanceJson.HasMember("hp") ? stanceJson["hp"].GetInt() : 100;
+                        int st = stanceJson.HasMember("st") ? stanceJson["st"].GetInt() : 100;
+                        int mn = stanceJson.HasMember("mn") ? stanceJson["mn"].GetInt() : 100;
+                        int level = stanceJson.HasMember("level") ? stanceJson["level"].GetInt() : 0;
+                        int order = stanceJson.HasMember("order") ? stanceJson["order"].GetInt() : 0;
+
                         for (auto& mi : targetInstance.modInstances) {
-                            if (mi.sourceModIndex == *modIdxOpt) {
+                            // Agora verifica o nome E todas as condições
+                            if (mi.sourceModIndex == *modIdxOpt && mi.hp == hp && mi.st == st && mi.mn == mn &&
+                                mi.level == level) {
                                 modInstancePtr = &mi;
                                 break;
                             }
@@ -2614,19 +2620,14 @@ void AnimationManager::LoadCycleMovesets() {
                             targetInstance.modInstances.emplace_back();
                             modInstancePtr = &targetInstance.modInstances.back();
                             modInstancePtr->sourceModIndex = *modIdxOpt;
-                            modInstancePtr->isSelected = true;  // Garante que é selecionado
-                            // Aplica level/hp na primeira vez que o moveset é criado
-                            if (stanceJson.HasMember("level") && stanceJson["level"].IsInt())
-                                modInstancePtr->level = stanceJson["level"].GetInt();
-                            if (stanceJson.HasMember("hp") && stanceJson["hp"].IsInt())
-                                modInstancePtr->hp = stanceJson["hp"].GetInt();
-                            if (stanceJson.HasMember("st") && stanceJson["st"].IsInt())
-                                modInstancePtr->st = stanceJson["st"].GetInt();
-                            if (stanceJson.HasMember("mn") && stanceJson["mn"].IsInt())
-                                modInstancePtr->mn = stanceJson["mn"].GetInt();
-                            if (stanceJson.HasMember("order") && stanceJson["order"].IsInt()) {
-                                modInstancePtr->order = stanceJson["order"].GetInt();
-                            }
+                            modInstancePtr->isSelected = true;
+
+                            // Aplica as condições ao criar o novo moveset
+                            modInstancePtr->hp = hp;
+                            modInstancePtr->st = st;
+                            modInstancePtr->mn = mn;
+                            modInstancePtr->level = level;
+                            modInstancePtr->order = order;  // Usa o 'order' lido do JSON
                         }
                         // --- FIM DA LÓGICA DE AGRUPAMENTO ---
 
