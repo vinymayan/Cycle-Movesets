@@ -17,6 +17,8 @@ namespace GlobalControl {
     // Ponteiro para a variável global, será preenchido quando o jogo carregar
     //inline RE::TESGlobal* g_targetGlobal = nullptr;
 
+    
+
     inline int g_currentStance = 0;
     inline int g_currentMoveset = 0;
     extern int g_directionalState; 
@@ -286,6 +288,8 @@ namespace GlobalControl {
     void NPCrandomNumber(RE::Actor* targetActor, const std::string& eventSource);
 
     void UpdateSkyPromptTexts();
+
+    void UpdatePowerAttackGlobals();
 
 
 }

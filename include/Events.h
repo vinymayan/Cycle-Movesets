@@ -53,8 +53,11 @@ struct NpcRuleMatch {
 RuleType RuleTypeFromString(const std::string& s);
 std::string RuleTypeToString(RuleType type);
 
+
+
 class AnimationManager : public clib_util::singleton::ISingleton<AnimationManager> {
-public:
+public:   
+    
     void ScanAnimationMods();
     void DrawMainMenu();
     void DrawUserMovesetCreator();
@@ -74,7 +77,15 @@ public:
 
     std::vector<int> GetAvailableMovesetIndices(RE::Actor* actor, const std::string& categoryName);
 
+    std::optional<std::pair<size_t, size_t>> FindSubAnimationByPath(const std::filesystem::path& configPath);
+    struct MovesetTags {
+        bool hasDPA = false;
+        bool hasCPA = false;
+    };
+    MovesetTags GetCurrentMovesetTags(const std::string& categoryName, int stanceIndex, int movesetIndex);
+
 private:
+    
     std::map<std::string, WeaponCategory> _categories;
     std::map<std::string, WeaponCategory> _npcCategories;
     std::vector<AnimationModDef> _allMods;
@@ -162,7 +173,7 @@ private:
 
     // Ponteiro para saber onde adicionar um sub-moveset vindo do modal
     UserMoveset* _userMovesetToAddTo = nullptr;
-
+    SubAnimationInstance* _subInstanceBeingEdited = nullptr;
 
 
     // --- NOVAS FUNÇÕES PRIVADAS ---
@@ -328,6 +339,14 @@ private:
     void AddIsRaceCondition(rapidjson::Value& conditionsArray, const std::string& plugin, RE::FormID formID,
                             rapidjson::Document::AllocatorType& allocator);
     int GetPriorityForType(RuleType type);
+
+    struct ScoredIndex {
+        int index;
+        float score;
+
+        // Necessário para o std::sort
+        bool operator<(const ScoredIndex& other) const { return score < other.score; }
+    };
     
 };
 

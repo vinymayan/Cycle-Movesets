@@ -13,6 +13,8 @@ struct SubAnimationDef {
     int powerAttackCount = 0;  // Contagem de arquivos BFCO_PowerAttack
     bool hasIdle = false;      // Presença de arquivos "idle"
     bool hasAnimations = false;
+    bool hasDPA = false;  
+    bool hasCPA = false;  
 };
 struct AnimationModDef {
     std::string name;
@@ -27,6 +29,7 @@ struct SubAnimationInstance {
     std::string sourceSubName;  // Nome da sub-animação de origem (e.g., "700036")
     size_t sourceModIndex;
     size_t sourceSubAnimIndex;
+    std::array<char, 128> editedName{};
     bool isSelected = true;
     bool pFront = false;
     bool pBack = false;
@@ -38,6 +41,8 @@ struct SubAnimationInstance {
     bool pBackLeft = false;
     bool pRandom = false;
     bool pDodge = false;
+    bool hasDPA = false;
+    bool hasCPA = false;
 };
 
 struct ModInstance {
@@ -46,6 +51,8 @@ struct ModInstance {
     std::vector<SubAnimationInstance> subAnimationInstances;
     int level = 0;  // Condição de Nível Mínimo
     int hp = 100;   // Condição de HP Máximo (em porcentagem)
+    int st = 100;
+    int mn = 100;
     int order = 0;
 };
 
