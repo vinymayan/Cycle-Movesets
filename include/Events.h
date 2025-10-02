@@ -53,8 +53,11 @@ struct NpcRuleMatch {
 RuleType RuleTypeFromString(const std::string& s);
 std::string RuleTypeToString(RuleType type);
 
+
+
 class AnimationManager : public clib_util::singleton::ISingleton<AnimationManager> {
-public:
+public:   
+    
     void ScanAnimationMods();
     void DrawMainMenu();
     void DrawUserMovesetCreator();
@@ -75,8 +78,14 @@ public:
     std::vector<int> GetAvailableMovesetIndices(RE::Actor* actor, const std::string& categoryName);
 
     std::optional<std::pair<size_t, size_t>> FindSubAnimationByPath(const std::filesystem::path& configPath);
+    struct MovesetTags {
+        bool hasDPA = false;
+        bool hasCPA = false;
+    };
+    MovesetTags GetCurrentMovesetTags(const std::string& categoryName, int stanceIndex, int movesetIndex);
 
 private:
+    
     std::map<std::string, WeaponCategory> _categories;
     std::map<std::string, WeaponCategory> _npcCategories;
     std::vector<AnimationModDef> _allMods;

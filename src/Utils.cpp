@@ -314,6 +314,7 @@ void GlobalControl::StancesSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
         case SkyPromptAPI::kDeclined:
             g_currentMoveset = 0;
             g_currentStance = 0;
+            UpdatePowerAttackGlobals();
             UpdateSkyPromptTexts();
             //StanceText = "Stances";
             //MovesetText = "Movesets";
@@ -343,6 +344,7 @@ void GlobalControl::StancesChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent e
                 if (g_currentStance < 1) {
                     g_currentStance = 4;  // Vai para o último
                 }
+                UpdatePowerAttackGlobals();
                 UpdateSkyPromptTexts();
                 SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
                 SkyPromptAPI::SendPrompt(StancesChangesSink::GetSingleton(), g_clientID);
@@ -355,6 +357,7 @@ void GlobalControl::StancesChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent e
                 if (g_currentStance > 4) {
                     g_currentStance = 1;  // Volta para o primeiro
                 }
+                UpdatePowerAttackGlobals();
                 UpdateSkyPromptTexts();
                 SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
                 SkyPromptAPI::SendPrompt(StancesChangesSink::GetSingleton(), g_clientID);
@@ -417,6 +420,7 @@ void GlobalControl::MovesetSink::ProcessEvent(SkyPromptAPI::PromptEvent event) c
             break;
         case SkyPromptAPI::kDeclined:
             g_currentMoveset = 1;
+            UpdatePowerAttackGlobals();
             UpdateSkyPromptTexts();
             RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", g_currentMoveset);
             //GlobalControl::MovesetText = "Moveset";
@@ -451,6 +455,7 @@ void GlobalControl::MovesetChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent e
                 if (g_currentMoveset < 1) {
                     g_currentMoveset = maxMovesets;  // Vai para o último
                 }
+                UpdatePowerAttackGlobals();
                 UpdateSkyPromptTexts();
                 logger::info("teste {}", MovesetText);
                 RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", g_currentMoveset);
@@ -463,6 +468,7 @@ void GlobalControl::MovesetChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent e
                 if (g_currentMoveset > maxMovesets) {
                     g_currentMoveset = 1;  // Volta para o primeiro
                 }
+                UpdatePowerAttackGlobals();
                 UpdateSkyPromptTexts();
                 logger::info("teste {}", MovesetText);
                 RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("testarone", g_currentMoveset);
@@ -531,12 +537,14 @@ RE::BSEventNotifyControl GlobalControl::ActionEventHandler::ProcessEvent(const S
             g_isWeaponDrawn = true;  // Define nosso controle como verdadeiro
             Cycleopen = true;
             // Envia os prompts para a API, fazendo o menu aparecer
+            UpdatePowerAttackGlobals();
             UpdateSkyPromptTexts();
             SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
             SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
         }
         if (a_event->type == SKSE::ActionEvent::Type::kBeginDraw) {
             SKSE::log::info("Arma sacada, mostrando o menu.");
+            UpdatePowerAttackGlobals();
             UpdateSkyPromptTexts();
             g_isWeaponDrawn = true;  // Define nosso controle como verdadeiro
 
@@ -595,6 +603,7 @@ void GlobalControl::TriggerSmartRandomNumber([[maybe_unused]] const std::string&
 
     g_currentMoveset = nextMoveset;
     player->SetGraphVariableInt("testarone", g_currentMoveset);
+    UpdatePowerAttackGlobals();
     UpdateSkyPromptTexts();
 
     // A lógica de comboState não é mais necessária para o modo sequencial ou o novo modo aleatório
@@ -641,6 +650,7 @@ RE::BSEventNotifyControl GlobalControl::MenuOpen::ProcessEvent(const RE::MenuOpe
     } 
     if (IsAnyMenuOpen() && IsThirdPerson()) {
         Cycleopen = false;
+        UpdatePowerAttackGlobals();
         UpdateSkyPromptTexts();
         SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
         SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
@@ -972,4 +982,33 @@ void GlobalControl::UpdateSkyPromptTexts() {
     StancesChangesSink::GetSingleton()->UpdatePrompts();
     MovesetSink::GetSingleton()->UpdatePrompts();
     MovesetChangesSink::GetSingleton()->UpdatePrompts();
+}
+
+void GlobalControl::UpdatePowerAttackGlobals() {
+    auto player = RE::PlayerCharacter::GetSingleton();
+    if (!player) return;
+
+    std::string category = GetCurrentWeaponCategoryName();
+    int stanceIndex = g_currentStance > 0 ? g_currentStance - 1 : 0;
+    int movesetIndex = g_currentMoveset;
+
+    // --- ALTERAÇÃO PRINCIPAL AQUI ---
+    // 1. O tipo da variável "tags" agora precisa do escopo da classe.
+    // 2. A função é chamada através do singleton do AnimationManager.
+    AnimationManager::MovesetTags tags = AnimationManager::GetSingleton()->GetCurrentMovesetTags(category, stanceIndex, movesetIndex);
+    // --- FIM DA ALTERAÇÃO ---
+
+    const auto tesDataHandler = RE::TESDataHandler::GetSingleton();
+    if (tesDataHandler) {
+        RE::TESGlobal* bfcoDPA_Global = tesDataHandler->LookupForm<RE::TESGlobal>(0x807, "SCSI-ACTbfco-Main.esp");
+        if (bfcoDPA_Global) {
+            bfcoDPA_Global->value = tags.hasDPA ? 1.0f : 0.0f;
+            SKSE::log::info("[UpdatePowerAttack] Global 'bfcoTG_DirPowerAttack' set to {}", bfcoDPA_Global->value);
+        } else {
+            SKSE::log::warn("[UpdatePowerAttack] Global 'bfcoTG_DirPowerAttack' não encontrado.");
+        }
+    }
+
+    player->SetGraphVariableBool("BFCO_HasCombo", tags.hasCPA);
+    SKSE::log::info("[UpdatePowerAttack] GraphVar 'BFCO_HasCombo' set to {}", tags.hasCPA);
 }

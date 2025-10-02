@@ -190,40 +190,59 @@
         subAnimDef.attackCount = 0;
         subAnimDef.powerAttackCount = 0;
         subAnimDef.hasIdle = false;
+        subAnimDef.hasAnimations = false;
+        subAnimDef.hasDPA = false;  // Valor inicial
+        subAnimDef.hasCPA = false;  // Valor inicial
         int hkxFileCount = 0;
+        bool hasDPA_A = false, hasDPA_B = false, hasDPA_L = false, hasDPA_R = false;
 
        // Itera sobre todos os arquivos na pasta para encontrar tags de animação
         for (const auto& fileEntry : std::filesystem::directory_iterator(subAnimPath)) {
             if (fileEntry.is_regular_file()) {
-                // --- PONTO 3: Ler apenas arquivos .hkx ---
                 std::string extension = fileEntry.path().extension().string();
+                std::string filename = fileEntry.path().filename().string();
+                std::string lowerFilename = filename;
+                std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(), ::tolower);
                 std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
-                // A lógica de verificação de tags agora só é executada para arquivos .hkx
                 if (extension == ".hkx") {
                     hkxFileCount++;
-                    std::string filename = fileEntry.path().filename().string();
-                    std::string lowerFilename = filename;
-                    std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(), ::tolower);
 
-                    if (filename.rfind("BFCO_Attack", 0) == 0) {  // Prefixo "BFCO_Attack"
+                    // Lógica de contagem de ataques
+                    if (lowerFilename.rfind("bfco_attack", 0) == 0) {
                         subAnimDef.attackCount++;
                     }
-                    if (filename.rfind("BFCO_PowerAttack", 0) == 0) {  // Prefixo "BFCO_PowerAttack"
+                    if (lowerFilename.rfind("bfco_powerattack", 0) == 0) {
                         subAnimDef.powerAttackCount++;
                     }
-                    if (lowerFilename.find("idle") != std::string::npos) {  // Contém "idle"
+                    if (lowerFilename.find("idle") != std::string::npos) {
                         subAnimDef.hasIdle = true;
                     }
+
+                    // Lógica de verificação de DPA e CPA
+                    if (lowerFilename == "bfco_powerattacka.hkx")
+                        hasDPA_A = true;
+                    else if (lowerFilename == "bfco_powerattackb.hkx")
+                        hasDPA_B = true;
+                    else if (lowerFilename == "bfco_powerattackl.hkx")
+                        hasDPA_L = true;
+                    else if (lowerFilename == "bfco_powerattackr.hkx")
+                        hasDPA_R = true;
+                    else if (lowerFilename == "bfco_powerattackcomb.hkx")
+                        subAnimDef.hasCPA = true;
                 }
             }
         }
-        // Se encontramos pelo menos um arquivo .hkx, marcamos a flag como verdadeira.
+
         if (hkxFileCount > 0) {
             subAnimDef.hasAnimations = true;
         }
-        SKSE::log::info("Scan da pasta '{}': {} arquivos .hkx encontrados. hasAnimations = {}", subAnimDef.name,
-                        hkxFileCount, subAnimDef.hasAnimations);
+
+        // Define hasDPA se todos os arquivos foram encontrados
+        subAnimDef.hasDPA = hasDPA_A && hasDPA_B && hasDPA_L && hasDPA_R;
+
+        SKSE::log::info("Scan da pasta '{}': {} arquivos .hkx. hasAnimations={}, hasDPA={}, hasCPA={}", subAnimDef.name,
+                        hkxFileCount, subAnimDef.hasAnimations, subAnimDef.hasDPA, subAnimDef.hasCPA);
     }
 
     // --- Lógica de Escaneamento (Carrega a Biblioteca) ---
@@ -291,6 +310,16 @@
         }
         LoadCustomCategories();
         LoadStanceNames();
+
+        ScanDarAnimations();
+        if (!_darSubMovesets.empty()) {
+            AnimationModDef darModDef;
+            darModDef.name = "[DAR] Animations";
+            darModDef.author = "Dynamic Animation Replacer";
+            darModDef.subAnimations = _darSubMovesets;  // Copia as animações DAR escaneadas
+            _allMods.push_back(darModDef);
+            SKSE::log::info("Integrou {} animações DAR como um mod virtual.", _darSubMovesets.size());
+        }
 
 
         if (!std::filesystem::exists(oarRootPath)) return;
@@ -1613,7 +1642,7 @@ void AnimationManager::SaveAllSettings() {
 
                         for (const auto& subInst : modInst.subAnimationInstances) {
                             if (!subInst.isSelected) continue;
-
+                            const auto& sourceMod = _allMods[subInst.sourceModIndex];
                             const auto& sourceSubAnim =
                                 _allMods[subInst.sourceModIndex].subAnimations[subInst.sourceSubAnimIndex];
 
@@ -1664,8 +1693,17 @@ void AnimationManager::SaveAllSettings() {
                             } else {
                                 config.order_in_playlist = lastParentOrder;
                             }
-
-                            fileUpdates[sourceSubAnim.path].push_back(config);
+                            std::filesystem::path configPath;
+                            if (sourceMod.name == "[DAR] Animations") {
+                                // Para DAR, o 'path' da sub-animação é o diretório.
+                                // Criamos um caminho lógico para um config.json dentro dele
+                                // para que UpdateOrCreateJson possa encontrar o diretório pai corretamente.
+                                configPath = sourceSubAnim.path / "user.json";
+                            } else {
+                                // Para OAR, o path já é o arquivo config.json.
+                                configPath = sourceSubAnim.path;
+                            }
+                            fileUpdates[configPath].push_back(config);
                         }
                     }
                 }
@@ -2323,8 +2361,13 @@ void AnimationManager::SaveCycleMovesets() {
 
                             const auto& animOriginMod = _allMods[subInst.sourceModIndex];
                             const auto& animOriginSub = animOriginMod.subAnimations[subInst.sourceSubAnimIndex];
-                            std::filesystem::path destJsonPath =
-                                animOriginSub.path.parent_path() / "User_CycleMoveset.json";
+                            std::filesystem::path destJsonPath;
+                            // Se a animação for do mod virtual DAR, o path é o próprio diretório
+                            if (animOriginMod.name == "[DAR] Animations") {
+                                destJsonPath = animOriginSub.path / "User_CycleMoveset.json";
+                            } else {  // Senão, é o pai do config.json
+                                destJsonPath = animOriginSub.path.parent_path() / "User_CycleMoveset.json";
+                            }
                             requiredFiles.insert(destJsonPath);
 
                             if (documents.find(destJsonPath) == documents.end()) {
@@ -2420,6 +2463,8 @@ void AnimationManager::SaveCycleMovesets() {
 
 
                             animObj.AddMember("sourceSubName", rapidjson::Value(nameToSave, allocator), allocator);
+                            animObj.AddMember("hasDPA", animOriginSub.hasDPA, allocator);
+                            animObj.AddMember("hasCPA", animOriginSub.hasCPA, allocator);
                             animObj.AddMember("sourceConfigPath",
                                               rapidjson::Value(animOriginSub.path.string().c_str(), allocator),
                                               allocator);
@@ -2510,7 +2555,9 @@ void AnimationManager::LoadCycleMovesets() {
             SKSE::log::warn("Diretório do OAR não encontrado. Carregamento de regras abortado.");
             return;
         }
-
+        const std::filesystem::path darRootPath =
+            "Data\\meshes\\actors\\character\\animations\\DynamicAnimationReplacer\\_CustomConditions";
+       
         std::set<std::filesystem::path> processedFolders;
 
         auto processJsonFile = [&](const std::filesystem::path& jsonPath) {
@@ -2649,11 +2696,14 @@ void AnimationManager::LoadCycleMovesets() {
                             auto indicesOpt = FindSubAnimationByPath(configPathStr);
 
                             if (!indicesOpt) {
-                                SKSE::log::warn(
-                                    "Não foi possível encontrar a animação para o config: {}. Pode ter sido removida. "
-                                    "Pulando.",
-                                    configPathStr);
-                                continue;  // Pula esta animação se o arquivo de configuração não pôde ser encontrado
+                                indicesOpt = FindSubAnimationByPath(configPathStr);
+                                if (!indicesOpt) {
+                                    SKSE::log::warn(
+                                        "Não foi possível encontrar a animação para o config/path: {}. Pode ter sido "
+                                        "removida. Pulando.",
+                                        configPathStr);
+                                    continue;
+                                }
                             }
 
                             SubAnimationInstance newSubInstance;
@@ -2668,6 +2718,12 @@ void AnimationManager::LoadCycleMovesets() {
                                     strcpy_s(newSubInstance.editedName.data(), newSubInstance.editedName.size(),
                                              savedName);
                                 }
+                            }
+                            if (animJson.HasMember("hasDPA") && animJson["hasDPA"].IsBool()) {
+                                newSubInstance.hasDPA = animJson["hasDPA"].GetBool();
+                            }
+                            if (animJson.HasMember("hasCPA") && animJson["hasCPA"].IsBool()) {
+                                newSubInstance.hasCPA = animJson["hasCPA"].GetBool();
                             }
 
                             // --- FIM DA LÓGICA DE BUSCA MELHORADA ---
@@ -2703,33 +2759,63 @@ void AnimationManager::LoadCycleMovesets() {
             }
         };
 
-        // 1º Passe: Procurar por User_CycleMoveset.json
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(oarRootPath)) {
-            // Iremos procurar apenas por pastas que contenham um config.json, que definem um sub-moveset.
-            if (entry.is_regular_file() && entry.path().filename() == "config.json") {
-                std::filesystem::path currentFolder = entry.path().parent_path();
+        if (std::filesystem::exists(oarRootPath)) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(oarRootPath)) {
+                // Iremos procurar apenas por pastas que contenham um config.json, que definem um sub-moveset.
+                if (entry.is_regular_file() && entry.path().filename() == "config.json") {
+                    std::filesystem::path currentFolder = entry.path().parent_path();
 
-                std::filesystem::path userFile = currentFolder / "User_CycleMoveset.json";
-                std::filesystem::path defaultFile = currentFolder / "CycleMoveset.json";
+                    std::filesystem::path userFile = currentFolder / "User_CycleMoveset.json";
+                    std::filesystem::path defaultFile = currentFolder / "CycleMoveset.json";
 
-                bool userFileExists = std::filesystem::exists(userFile);
+                    bool userFileExists = std::filesystem::exists(userFile);
 
-                // Cenário 1: User_CycleMoveset.json existe.
-                if (userFileExists) {
-                    // Tentamos processá-lo. A função retorna `true` se tiver conteúdo e for processado.
-                    // Se o arquivo existir mas estiver vazio ou mal-formado, a função retorna `false`
-                    // e nós NÃO tentamos carregar o arquivo de fallback, respeitando a intenção do usuário.
-                    processJsonFile(userFile);
-                }
-                // Cenário 2: User_CycleMoveset.json NÃO existe.
-                else {
-                    // Procuramos pelo arquivo de fallback.
-                    if (std::filesystem::exists(defaultFile)) {
-                        processJsonFile(defaultFile);
+                    // Cenário 1: User_CycleMoveset.json existe.
+                    if (userFileExists) {
+                        // Tentamos processá-lo. A função retorna `true` se tiver conteúdo e for processado.
+                        // Se o arquivo existir mas estiver vazio ou mal-formado, a função retorna `false`
+                        // e nós NÃO tentamos carregar o arquivo de fallback, respeitando a intenção do usuário.
+                        processJsonFile(userFile);
+                    }
+                    // Cenário 2: User_CycleMoveset.json NÃO existe.
+                    else {
+                        // Procuramos pelo arquivo de fallback.
+                        if (std::filesystem::exists(defaultFile)) {
+                            processJsonFile(defaultFile);
+                        }
                     }
                 }
             }
         }
+        if (std::filesystem::exists(darRootPath)) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(darRootPath)) {
+                // Iremos procurar apenas por pastas que contenham um config.json, que definem um sub-moveset.
+                if (entry.is_regular_file() && entry.path().filename() == "user.json") {
+                    std::filesystem::path currentFolder = entry.path().parent_path();
+
+                    std::filesystem::path userFile = currentFolder / "User_CycleMoveset.json";
+                    std::filesystem::path defaultFile = currentFolder / "CycleMoveset.json";
+
+                    bool userFileExists = std::filesystem::exists(userFile);
+
+                    // Cenário 1: User_CycleMoveset.json existe.
+                    if (userFileExists) {
+                        // Tentamos processá-lo. A função retorna `true` se tiver conteúdo e for processado.
+                        // Se o arquivo existir mas estiver vazio ou mal-formado, a função retorna `false`
+                        // e nós NÃO tentamos carregar o arquivo de fallback, respeitando a intenção do usuário.
+                        processJsonFile(userFile);
+                    }
+                    // Cenário 2: User_CycleMoveset.json NÃO existe.
+                    else {
+                        // Procuramos pelo arquivo de fallback.
+                        if (std::filesystem::exists(defaultFile)) {
+                            processJsonFile(defaultFile);
+                        }
+                    }
+                }
+            }
+        }
+        
 
         // <<< MUDANÇA: Adiciona um passo de ordenação DEPOIS de carregar todos os arquivos
         SKSE::log::info("Ordenando movesets com base na prioridade definida...");
@@ -2860,6 +2946,64 @@ void AnimationManager::LoadCycleMovesets() {
             return it->second.stanceNames[stanceIndex];
         }
         return std::to_string(stanceIndex + 1);  // Fallback
+    }
+
+
+    // NOVA FUNÇÃO: Busca as tags DPA e CPA para o moveset ativo (baseada em GetCurrentMovesetName)
+    AnimationManager::MovesetTags AnimationManager::GetCurrentMovesetTags(const std::string& categoryName,
+                                                                          int stanceIndex, int movesetIndex) {
+        auto animManager = AnimationManager::GetSingleton();
+        if (movesetIndex <= 0) {
+            return {false, false};  // Retorna padrão se não houver moveset ativo
+        }
+
+        auto cat_it = animManager->GetCategories().find(categoryName);
+        if (cat_it == animManager->GetCategories().end()) {
+            return {false, false};
+        }
+
+        const WeaponCategory& category = cat_it->second;
+        if (stanceIndex < 0 || stanceIndex >= 4) {
+            return {false, false};
+        }
+
+        const CategoryInstance& instance = category.instances[stanceIndex];
+        const SubAnimationInstance* targetMoveset = nullptr;
+        int parentCounter = 0;
+
+        // A lógica para encontrar o moveset ativo é a mesma da função GetCurrentMovesetName
+        for (const auto& modInst : instance.modInstances) {
+            if (!modInst.isSelected) continue;
+            for (const auto& subInst : modInst.subAnimationInstances) {
+                if (!subInst.isSelected) continue;
+
+                const auto& sourceSubAnim = _allMods[subInst.sourceModIndex].subAnimations[subInst.sourceSubAnimIndex];
+                if (!sourceSubAnim.hasAnimations) {
+                    continue;
+                }
+
+                bool isParent = !(subInst.pFront || subInst.pBack || subInst.pLeft || subInst.pRight ||
+                                  subInst.pFrontRight || subInst.pFrontLeft || subInst.pBackRight ||
+                                  subInst.pBackLeft || subInst.pRandom || subInst.pDodge);
+
+                if (isParent) {
+                    parentCounter++;
+                    if (parentCounter == movesetIndex) {
+                        targetMoveset = &subInst;
+                        goto found_target;  // Encontramos o moveset pai, podemos parar de procurar
+                    }
+                }
+            }
+        }
+
+    found_target:
+        if (targetMoveset) {
+            // Retorna as tags do moveset encontrado
+            return {targetMoveset->hasDPA, targetMoveset->hasCPA};
+        }
+
+        // Se não encontrou (índice inválido), retorna o padrão
+        return {false, false};
     }
 
     // Função para buscar o nome do moveset
@@ -3232,7 +3376,7 @@ void AnimationManager::LoadCycleMovesets() {
                 continue;
             }
 
-            UpdateOrCreateJson(subMovesetPath / "config.json", data.configs);
+            UpdateOrCreateJson(subMovesetPath / "user.json", data.configs);
 
             // LÓGICA ATUALIZADA PARA O CYCLEDAR.JSON
             {

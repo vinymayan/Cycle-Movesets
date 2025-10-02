@@ -13,6 +13,8 @@ struct SubAnimationDef {
     int powerAttackCount = 0;  // Contagem de arquivos BFCO_PowerAttack
     bool hasIdle = false;      // Presença de arquivos "idle"
     bool hasAnimations = false;
+    bool hasDPA = false;  
+    bool hasCPA = false;  
 };
 struct AnimationModDef {
     std::string name;
@@ -39,6 +41,8 @@ struct SubAnimationInstance {
     bool pBackLeft = false;
     bool pRandom = false;
     bool pDodge = false;
+    bool hasDPA = false;
+    bool hasCPA = false;
 };
 
 struct ModInstance {

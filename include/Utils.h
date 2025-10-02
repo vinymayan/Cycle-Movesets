@@ -289,5 +289,7 @@ namespace GlobalControl {
 
     void UpdateSkyPromptTexts();
 
+    void UpdatePowerAttackGlobals();
+
 
 }
