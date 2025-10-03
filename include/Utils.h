@@ -18,7 +18,7 @@ namespace GlobalControl {
     //inline RE::TESGlobal* g_targetGlobal = nullptr;
 
     
-
+    inline bool g_isPlayerInCombat = false;
     inline int g_currentStance = 0;
     inline int g_currentMoveset = 0;
     extern int g_directionalState; 
@@ -28,6 +28,7 @@ namespace GlobalControl {
     inline bool Cycleopen = false;
     inline bool MovesetChangesOpen = false;
     inline bool StanceChangesOpen = false;
+    inline bool StanceOpen = false;
     
   
     inline std::string StanceText = "Stances";
@@ -269,6 +270,10 @@ namespace GlobalControl {
         inline static std::shared_mutex g_mutex;
     };
 
+
+    
+
+
     // Função que será chamada para gerar o número
     void TriggerSmartRandomNumber(const std::string& eventSource);
 
@@ -279,17 +284,52 @@ namespace GlobalControl {
         RE::LockpickingMenu::MENU_NAME, RE::SleepWaitMenu::MENU_NAME,  RE::LevelUpMenu::MENU_NAME,
         RE::Console::MENU_NAME,         RE::BookMenu::MENU_NAME,       RE::CreditsMenu::MENU_NAME,
         RE::LoadingMenu::MENU_NAME,     RE::MessageBoxMenu::MENU_NAME, RE::MainMenu::MENU_NAME,
-        RE::RaceSexMenu::MENU_NAME,
+        RE::RaceSexMenu::MENU_NAME,     RE::FavoritesMenu::MENU_NAME
     };
 
     inline bool IsAnyMenuOpen();
     inline bool IsThirdPerson();
 
+    void OnUpdate();
+
     void NPCrandomNumber(RE::Actor* targetActor, const std::string& eventSource);
 
     void UpdateSkyPromptTexts();
-
+    inline bool wheelerOpen;
     void UpdatePowerAttackGlobals();
+    bool ShouldShowPrompts();
+    void UpdatePromptVisibility();
+    class InputListener : public RE::BSTEventSink<RE::InputEvent*> {
+public:
+    // Singleton para garantir que exista apenas uma instância
+    static InputListener* GetSingleton() {
+        static InputListener singleton;
+        return &singleton;
+    }
+    static inline RE::INPUT_DEVICE lastUsedDevice = RE::INPUT_DEVICE::kKeyboard;
+    // A função que processa os eventos de input do jogo
+    virtual RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* a_event,
+                                                  RE::BSTEventSource<RE::InputEvent*>* a_eventSource) override;
+    static int GetDirectionalState() { return directionalState; };
+    
 
+protected:
+
+private:
+    // Função para calcular a direção com base nas teclas pressionadas
+    void UpdateDirectionalState();
+    static inline int directionalState = 0;
+    // Variáveis para rastrear o estado de cada tecla de movimento
+    bool w_pressed = false;
+    bool a_pressed = false;
+    bool s_pressed = false;
+    bool d_pressed = false;
+
+    // Controle
+    bool c_up = false;
+    bool c_left = false;
+    bool c_down = false;
+    bool c_right = false;
+};
 
 }

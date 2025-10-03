@@ -33,32 +33,43 @@ namespace MyMenu {
 
                 bool settings_changed = false;
 
-                // Opção e tooltip traduzidos
-                if (ImGui::Checkbox(LOC("option_auto_cycle"), &Settings::CycleMoveset)) {
+                ImGui::Text(LOC("option_auto_cycle_mode"));  // Crie uma tradução para "Auto Cycle Mode"
+                ImGui::SetNextItemWidth(250.0f);
+
+                const char* cycleOptions[] = {
+                    LOC("cycle_disabled"),    // "Disabled Auto Cycle"
+                    LOC("cycle_sequential"),  // "Auto Cycle (Sequential)"
+                    LOC("cycle_random")       // "Random Auto Cycle"
+                };
+
+                if (ImGui::Combo("##AutoCycleCombo", &Settings::autoCycleMode, cycleOptions,
+                                 sizeof(cycleOptions) / sizeof(cycleOptions[0]))) {
                     settings_changed = true;
+                    // Traduz a opção do combo para as variáveis de configuração originais
+                    switch (Settings::autoCycleMode) {
+                        case 0:  // Disabled
+                            Settings::CycleMoveset = false;
+                            Settings::RandomCycle = false;
+                            break;
+                        case 1:  // Auto Cycle (Sequential)
+                            Settings::CycleMoveset = true;
+                            Settings::RandomCycle = false;
+                            break;
+                        case 2:  // Random Auto Cycle
+                            Settings::CycleMoveset = true;
+                            Settings::RandomCycle = true;
+                            break;
+                    }
                 }
                 ImGui::SameLine();
                 ImGui::TextDisabled("(?)");
                 if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip(LOC("tooltip_auto_cycle"));
+                    ImGui::SetTooltip(LOC("tooltip_auto_cycle_mode"));  // Tooltip explicando as 3 opções
                 }
-                // --- NOVA CHECKBOX ADICIONADA AQUI ---
-                if (ImGui::Checkbox(
-                        "Random cycle",
-                        &Settings::RandomCycle)) {  // Supondo que você adicionará a tradução LOC("option_random_cycle")
-                    settings_changed = true;
-                }
-                ImGui::SameLine();
-                ImGui::TextDisabled("(?)");
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip(
-                        "When enabled, the automatic moveset cycle will be random instead of sequential. This mode has "
-                        "no minimum moveset requirement.");  // Supondo LOC("tooltip_random_cycle")
-                }
-                // --- FIM DA ADIÇÃO ---
+
                 ImGui::Spacing();
                 ImGui::SetNextItemWidth(200.0f);
-                // Opção e tooltip traduzidos
+
                 if (ImGui::SliderFloat(LOC("option_cycle_timer"), &Settings::CycleTimer, 0.5f, 5.0f, "%.1f s")) {
                     settings_changed = true;
                 }
@@ -67,15 +78,53 @@ namespace MyMenu {
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip(LOC("tooltip_cycle_timer"));
                 }
-
+                ImGui::Spacing();
+                ImGui::SetNextItemWidth(200.0f);
                 
-                if (ImGui::Checkbox("Show Menu",&Settings::ShowMenu)) { 
+                ImGui::Text(LOC("option_menu_visibility"));  // Crie uma tradução para "Menu Visibility"
+                ImGui::SetNextItemWidth(250.0f);
+
+                const char* visibilityOptions[] = {
+                    LOC("visibility_hidden"),       // "Hidden"
+                    LOC("visibility_only_combat"),  // "Only in Combat"
+                    LOC("visibility_weapon_draw")   // "When Weapon is Drawn"
+                };
+
+                if (ImGui::Combo("##MenuVisibilityCombo", &Settings::menuVisibilityMode, visibilityOptions,
+                                 sizeof(visibilityOptions) / sizeof(visibilityOptions[0]))) {
                     settings_changed = true;
-                    if (!SkyPromptAPI::RequestTheme(GlobalControl::g_clientID,Settings::ShowMenu ? "Cycle Movesets" : "Cycle Movesets_hidden")) {
-                        logger::error("Falha ao solicitar o tema");
+                    // Traduz a opção do combo para as variáveis de configuração originais
+                    switch (Settings::menuVisibilityMode) {
+                        case 0:  // Hidden
+                            Settings::ShowMenu = false;
+                            Settings::OnlyCombat = false;
+                            break;
+                        case 1:  // Only in Combat
+                            Settings::ShowMenu = true;
+                            Settings::OnlyCombat = true;
+                            break;
+                        case 2:  // When Weapon is Drawn
+                            Settings::ShowMenu = true;
+                            Settings::OnlyCombat = false;
+                            break;
                     }
+                    // Atualiza o tema do SkyPrompt imediatamente
+                    SkyPromptAPI::RequestTheme(GlobalControl::g_clientID,Settings::ShowMenu ? "Cycle Movesets" : "Cycle Movesets_hidden");
+                    SkyPromptAPI::RemovePrompt(GlobalControl::MovesetSink::GetSingleton(), GlobalControl::g_clientID);
+                    SkyPromptAPI::RemovePrompt(GlobalControl::StancesSink::GetSingleton(), GlobalControl::g_clientID);
+                    
                     GlobalControl::UpdateSkyPromptTexts();
                 }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(?)");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip(LOC("tooltip_menu_visibility"));  // Tooltip explicando as 3 opções
+                }
+                if (ImGui::Checkbox("BFCO directional attacks", &Settings::bfcoDirectionalAttacks)) {
+                    settings_changed = true;
+                    
+                }
+                
                 if (settings_changed) {
                     MyMenu::SaveSettings();
                 }
@@ -151,12 +200,15 @@ namespace MyMenu {
 
         // --- ADICIONAR SALVAMENTO DO IDIOMA ---
         doc.AddMember("SelectedLanguage", rapidjson::Value(Settings::SelectedLanguage.c_str(), allocator), allocator);
-
+        doc.AddMember("autoCycleMode", Settings::autoCycleMode, allocator);
+        doc.AddMember("menuVisibilityMode", Settings::menuVisibilityMode, allocator);
         // Adiciona as configurações gerais
         doc.AddMember("CycleMoveset", Settings::CycleMoveset, allocator);
         doc.AddMember("RandomCycle", Settings::RandomCycle, allocator);
         doc.AddMember("CycleTimer", Settings::CycleTimer, allocator);
         doc.AddMember("ShowMenu", Settings::ShowMenu, allocator);
+        doc.AddMember("OnlyCombat", Settings::OnlyCombat, allocator);
+        doc.AddMember("BfcoDPA", Settings::bfcoDirectionalAttacks, allocator);
 
         // Cria o array de dispositivos
         rapidjson::Value devicesArray(rapidjson::kArrayType);
@@ -239,7 +291,12 @@ namespace MyMenu {
             // Se não houver idioma salvo, carrega o padrão
             LocalizationManager::GetSingleton().LoadLanguage("English");
         }
-
+        if (doc.HasMember("autoCycleMode") && doc["autoCycleMode"].IsInt()) {
+            Settings::autoCycleMode = doc["autoCycleMode"].GetInt();
+        }
+        if (doc.HasMember("menuVisibilityMode") && doc["menuVisibilityMode"].IsInt()) {
+            Settings::menuVisibilityMode = doc["menuVisibilityMode"].GetInt();
+        }
         // Carrega as configurações gerais
         if (doc.HasMember("CycleMoveset") && doc["CycleMoveset"].IsBool()) {
             Settings::CycleMoveset = doc["CycleMoveset"].GetBool();
@@ -252,6 +309,12 @@ namespace MyMenu {
         }
         if (doc.HasMember("ShowMenu") && doc["ShowMenu"].IsBool()) {
             Settings::ShowMenu = doc["ShowMenu"].GetBool();
+        }
+        if (doc.HasMember("OnlyCombat") && doc["OnlyCombat"].IsBool()) {
+            Settings::OnlyCombat = doc["OnlyCombat"].GetBool();
+        }
+        if (doc.HasMember("BfcoDPA") && doc["BfcoDPA"].IsBool()) {
+            Settings::bfcoDirectionalAttacks = doc["BfcoDPA"].GetBool();
         }
 
         // Carrega as configurações dos dispositivos

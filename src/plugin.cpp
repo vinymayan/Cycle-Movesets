@@ -82,11 +82,11 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
     }
 
     if (message->type == SKSE::MessagingInterface::kNewGame || message->type == SKSE::MessagingInterface::kPostLoadGame) {
-        
+        WheelerKeys();
         // 2. Requisitar um ClientID da API SkyPrompt
         auto* inputDeviceManager = RE::BSInputDeviceManager::GetSingleton();
         if (inputDeviceManager) {
-            inputDeviceManager->AddEventSink(InputListener::GetSingleton());
+            inputDeviceManager->AddEventSink(GlobalControl::InputListener::GetSingleton());
             SKSE::log::info("Listener de input registrado com sucesso!");
         }
 
@@ -111,6 +111,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
 
         GlobalControl::NpcCombatTracker::RegisterSinksForExistingCombatants();
     }
+
 }
 
 SKSEPluginLoad(const SKSE::LoadInterface *skse) {
@@ -119,6 +120,7 @@ SKSEPluginLoad(const SKSE::LoadInterface *skse) {
     logger::info("Plugin loaded");
     AnimationManager::GetSingleton()->ScanAnimationMods();
     SKSE::Init(skse);
+    
     SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
     
     // Registra seu ouvinte de eventos de Ação (sacar/guardar arma)

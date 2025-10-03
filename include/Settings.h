@@ -5,6 +5,19 @@
 #include <vector>
 #include "MCP.h"
 
+struct DPATags {
+    bool hasA = false;  // Para BFCO_PowerAttackA.hkx
+    bool hasB = false;  // Para BFCO_PowerAttackB.hkx
+    bool hasL = false;  // Para BFCO_PowerAttackL.hkx
+    bool hasR = false;  // Para BFCO_PowerAttackR.hkx
+
+    // Função auxiliar para verificar se algum DPA está disponível
+    bool any() const { return hasA || hasB || hasL || hasR; }
+};
+struct MovesetTags {
+    DPATags dpaTags;
+    bool hasCPA = false;
+};
 // --- Definições da Biblioteca ---
 struct SubAnimationDef {
     std::string name;
@@ -13,7 +26,7 @@ struct SubAnimationDef {
     int powerAttackCount = 0;  // Contagem de arquivos BFCO_PowerAttack
     bool hasIdle = false;      // Presença de arquivos "idle"
     bool hasAnimations = false;
-    bool hasDPA = false;  
+    DPATags dpaTags;
     bool hasCPA = false;  
 };
 struct AnimationModDef {
@@ -41,7 +54,7 @@ struct SubAnimationInstance {
     bool pBackLeft = false;
     bool pRandom = false;
     bool pDodge = false;
-    bool hasDPA = false;
+    DPATags dpaTags;
     bool hasCPA = false;
 };
 
@@ -84,3 +97,7 @@ struct UserMoveset {
     std::string name;
     std::vector<SubAnimationInstance> subAnimations;
 };
+
+void WheelerKeys();
+inline int WheelerKeyboard = 0;
+inline int WheelerGamepad = 0;

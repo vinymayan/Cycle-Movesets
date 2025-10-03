@@ -191,10 +191,10 @@
         subAnimDef.powerAttackCount = 0;
         subAnimDef.hasIdle = false;
         subAnimDef.hasAnimations = false;
-        subAnimDef.hasDPA = false;  // Valor inicial
+        subAnimDef.dpaTags = {};
         subAnimDef.hasCPA = false;  // Valor inicial
         int hkxFileCount = 0;
-        bool hasDPA_A = false, hasDPA_B = false, hasDPA_L = false, hasDPA_R = false;
+        
 
        // Itera sobre todos os arquivos na pasta para encontrar tags de animação
         for (const auto& fileEntry : std::filesystem::directory_iterator(subAnimPath)) {
@@ -221,13 +221,13 @@
 
                     // Lógica de verificação de DPA e CPA
                     if (lowerFilename == "bfco_powerattacka.hkx")
-                        hasDPA_A = true;
+                        subAnimDef.dpaTags.hasA = true;
                     else if (lowerFilename == "bfco_powerattackb.hkx")
-                        hasDPA_B = true;
+                        subAnimDef.dpaTags.hasB = true;
                     else if (lowerFilename == "bfco_powerattackl.hkx")
-                        hasDPA_L = true;
+                        subAnimDef.dpaTags.hasL = true;
                     else if (lowerFilename == "bfco_powerattackr.hkx")
-                        hasDPA_R = true;
+                        subAnimDef.dpaTags.hasR = true;
                     else if (lowerFilename == "bfco_powerattackcomb.hkx")
                         subAnimDef.hasCPA = true;
                 }
@@ -238,11 +238,10 @@
             subAnimDef.hasAnimations = true;
         }
 
-        // Define hasDPA se todos os arquivos foram encontrados
-        subAnimDef.hasDPA = hasDPA_A && hasDPA_B && hasDPA_L && hasDPA_R;
 
-        SKSE::log::info("Scan da pasta '{}': {} arquivos .hkx. hasAnimations={}, hasDPA={}, hasCPA={}", subAnimDef.name,
-                        hkxFileCount, subAnimDef.hasAnimations, subAnimDef.hasDPA, subAnimDef.hasCPA);
+         logger::info("Scan da pasta '{}': hasDPA (A:{}, B:{}, L:{}, R:{}), hasCPA:{}", subAnimDef.name,
+                        subAnimDef.dpaTags.hasA, subAnimDef.dpaTags.hasB, subAnimDef.dpaTags.hasL,
+                        subAnimDef.dpaTags.hasR, subAnimDef.hasCPA);
     }
 
     // --- Lógica de Escaneamento (Carrega a Biblioteca) ---
@@ -2463,7 +2462,10 @@ void AnimationManager::SaveCycleMovesets() {
 
 
                             animObj.AddMember("sourceSubName", rapidjson::Value(nameToSave, allocator), allocator);
-                            animObj.AddMember("hasDPA", animOriginSub.hasDPA, allocator);
+                            animObj.AddMember("hasDPA_A", animOriginSub.dpaTags.hasA, allocator);
+                            animObj.AddMember("hasDPA_B", animOriginSub.dpaTags.hasB, allocator);
+                            animObj.AddMember("hasDPA_L", animOriginSub.dpaTags.hasL, allocator);
+                            animObj.AddMember("hasDPA_R", animOriginSub.dpaTags.hasR, allocator);
                             animObj.AddMember("hasCPA", animOriginSub.hasCPA, allocator);
                             animObj.AddMember("sourceConfigPath",
                                               rapidjson::Value(animOriginSub.path.string().c_str(), allocator),
@@ -2719,9 +2721,14 @@ void AnimationManager::LoadCycleMovesets() {
                                              savedName);
                                 }
                             }
-                            if (animJson.HasMember("hasDPA") && animJson["hasDPA"].IsBool()) {
-                                newSubInstance.hasDPA = animJson["hasDPA"].GetBool();
-                            }
+                            if (animJson.HasMember("hasDPA_A") && animJson["hasDPA_A"].IsBool())
+                                newSubInstance.dpaTags.hasA = animJson["hasDPA_A"].GetBool();
+                            if (animJson.HasMember("hasDPA_B") && animJson["hasDPA_B"].IsBool())
+                                newSubInstance.dpaTags.hasB = animJson["hasDPA_B"].GetBool();
+                            if (animJson.HasMember("hasDPA_L") && animJson["hasDPA_L"].IsBool())
+                                newSubInstance.dpaTags.hasL = animJson["hasDPA_L"].GetBool();
+                            if (animJson.HasMember("hasDPA_R") && animJson["hasDPA_R"].IsBool())
+                                newSubInstance.dpaTags.hasR = animJson["hasDPA_R"].GetBool();
                             if (animJson.HasMember("hasCPA") && animJson["hasCPA"].IsBool()) {
                                 newSubInstance.hasCPA = animJson["hasCPA"].GetBool();
                             }
@@ -2950,7 +2957,7 @@ void AnimationManager::LoadCycleMovesets() {
 
 
     // NOVA FUNÇÃO: Busca as tags DPA e CPA para o moveset ativo (baseada em GetCurrentMovesetName)
-    AnimationManager::MovesetTags AnimationManager::GetCurrentMovesetTags(const std::string& categoryName,
+    MovesetTags AnimationManager::GetCurrentMovesetTags(const std::string& categoryName,
                                                                           int stanceIndex, int movesetIndex) {
         auto animManager = AnimationManager::GetSingleton();
         if (movesetIndex <= 0) {
@@ -2999,11 +3006,11 @@ void AnimationManager::LoadCycleMovesets() {
     found_target:
         if (targetMoveset) {
             // Retorna as tags do moveset encontrado
-            return {targetMoveset->hasDPA, targetMoveset->hasCPA};
+            return {targetMoveset->dpaTags, targetMoveset->hasCPA};
         }
 
         // Se não encontrou (índice inválido), retorna o padrão
-        return {false, false};
+        return {{}, false};
     }
 
     // Função para buscar o nome do moveset
