@@ -78,10 +78,7 @@ public:
     std::vector<int> GetAvailableMovesetIndices(RE::Actor* actor, const std::string& categoryName);
 
     std::optional<std::pair<size_t, size_t>> FindSubAnimationByPath(const std::filesystem::path& configPath);
-    struct MovesetTags {
-        bool hasDPA = false;
-        bool hasCPA = false;
-    };
+    
     MovesetTags GetCurrentMovesetTags(const std::string& categoryName, int stanceIndex, int movesetIndex);
 
 private:

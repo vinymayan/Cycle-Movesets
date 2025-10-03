@@ -17,8 +17,8 @@ struct MatchResult {
     int score = -1;  // Pontuação de especificidade
 };
 // Esta função é chamada a cada frame de input
-RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_event,
-                                                     RE::BSTEventSource<RE::InputEvent*>*) {
+RE::BSEventNotifyControl GlobalControl::InputListener::ProcessEvent(RE::InputEvent* const* a_event,
+                                                                    RE::BSTEventSource<RE::InputEvent*>*) {
     if (!a_event || !*a_event) {
         return RE::BSEventNotifyControl::kContinue;
     }
@@ -27,6 +27,7 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
 
     for (auto* event = *a_event; event; event = event->next) {
         RE::INPUT_DEVICE device = event->GetDevice();
+        
         // Ignora movimentos do mouse para não trocar o dispositivo acidentalmente
         if (device != RE::INPUT_DEVICE::kMouse && device != RE::INPUT_DEVICE::kNone) {
             if (lastUsedDevice != device) {
@@ -56,10 +57,6 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
             }
         } else if (event->GetEventType() == RE::INPUT_EVENT_TYPE::kButton) {
             auto* button = event->AsButtonEvent();
-            if (!button || button->GetDevice() != RE::INPUT_DEVICE::kKeyboard) {
-                continue;  // Ignora se não for um botão ou não for do teclado
-            }
-
             const uint32_t scanCode = button->GetIDCode();
 
             // Lógica rigorosa de máquina de estados para cada tecla
@@ -94,24 +91,48 @@ RE::BSEventNotifyControl InputListener::ProcessEvent(RE::InputEvent* const* a_ev
                 if (button->IsDown() && !d_pressed) {
                     d_pressed = true;
                     umaTeclaDeMovimentoMudou = true;
-                } else if (button->IsUp() && d_pressed) {
+                } else if (button->IsUp()) {
                     d_pressed = false;
                     umaTeclaDeMovimentoMudou = true;
                 }
+            } else if (scanCode == WheelerKeyboard) {
+                if (button->IsDown()) {
+                    wheelerOpen = true;
+                    SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
+                    SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
+                } else if (button->IsUp() && !IsAnyMenuOpen) {
+                    wheelerOpen = false;
+                    SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
+                    SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+                }
+            }
+
+            if (device == RE::INPUT_DEVICE::kGamepad) {
+                if (scanCode == WheelerGamepad) {
+                    if (button->IsDown()) {
+                        wheelerOpen = true;
+                        SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
+                        SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
+                    } else if (button->IsUp() && ShouldShowPrompts()) {
+                        wheelerOpen = false;
+                        SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
+                        SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+                    }
+                }
             }
         }
-    }
 
-    // Apenas recalcule a direção se uma das nossas teclas de movimento REALMENTE mudou de estado.
-    if (umaTeclaDeMovimentoMudou) {
-        UpdateDirectionalState();
+        // Apenas recalcule a direção se uma das nossas teclas de movimento REALMENTE mudou de estado.
+        if (umaTeclaDeMovimentoMudou) {
+            UpdateDirectionalState();
+        }
+        
+        return RE::BSEventNotifyControl::kContinue;
     }
-
-    return RE::BSEventNotifyControl::kContinue;
 }
 
 // Esta função calcula o valor final da sua variável
-void InputListener::UpdateDirectionalState() {
+void GlobalControl::InputListener::UpdateDirectionalState() {
     //static int DirecionalCycleMoveset = 0;
     int VariavelAnterior = directionalState;
     
@@ -152,20 +173,32 @@ void InputListener::UpdateDirectionalState() {
         // Aqui você enviaria o valor para sua animação, por exemplo:
         // RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("MinhaVariavelDirecional",
         // directionalState );
-        if (GlobalControl::g_isWeaponDrawn && !GlobalControl::MovesetChangesOpen && !GlobalControl::StanceChangesOpen && GlobalControl::IsThirdPerson()) {
+        if (ShouldShowPrompts() && !GlobalControl::MovesetChangesOpen && !GlobalControl::StanceChangesOpen) {
+            SkyPromptAPI::SendPrompt(GlobalControl::StancesSink::GetSingleton(), GlobalControl::g_clientID);
             SkyPromptAPI::SendPrompt(GlobalControl::MovesetSink::GetSingleton(), GlobalControl::g_clientID);
             //SKSE::log::info("SkyPrompt reenviado devido à mudança de direção.");
             
         }
-        if (GlobalControl::g_isWeaponDrawn && GlobalControl::MovesetChangesOpen && !GlobalControl::StanceChangesOpen &&
-            GlobalControl::IsThirdPerson()) {
+        if (!ShouldShowPrompts()) {
+            SkyPromptAPI::RemovePrompt(GlobalControl::StancesSink::GetSingleton(), GlobalControl::g_clientID);
+            SkyPromptAPI::RemovePrompt(GlobalControl::MovesetSink::GetSingleton(), GlobalControl::g_clientID);
+            //SKSE::log::info("SkyPrompt reenviado devido à mudança de direção.");
+            
+        }
+
+        if (ShouldShowPrompts() && GlobalControl::MovesetChangesOpen && !GlobalControl::StanceChangesOpen) {
             SkyPromptAPI::SendPrompt(GlobalControl::MovesetChangesSink::GetSingleton(), GlobalControl::g_clientID);
             
             //SKSE::log::info("SkyPrompt reenviado devido à mudança de direção e menu aberto.");
         }
     }
     RE::PlayerCharacter::GetSingleton()->SetGraphVariableInt("DirecionalCycleMoveset", directionalState);
-
+    GlobalControl::UpdatePowerAttackGlobals();
+    if (wheelerOpen) {
+        wheelerOpen = false;
+        SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
+        SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+    }
 }
 
 // NOVA FUNÇÃO AUXILIAR PARA QUALQUER ATOR
@@ -447,7 +480,7 @@ void GlobalControl::MovesetChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent e
         return;
     }
 
-    logger::info("before kup");
+    //logger::info("before kup");
     switch (event.type) {
         case SkyPromptAPI::kAccepted:
             if (event.prompt.eventID == 2) {
@@ -476,18 +509,15 @@ void GlobalControl::MovesetChangesSink::ProcessEvent(SkyPromptAPI::PromptEvent e
                 SkyPromptAPI::SendPrompt(MovesetChangesSink::GetSingleton(), g_clientID);
                 break;
             }
-        case SkyPromptAPI::kTimeout:
+        /*case SkyPromptAPI::kTimeout:
             SkyPromptAPI::SendPrompt(MovesetChangesSink::GetSingleton(), g_clientID);
-            break;
+            break;*/
         case SkyPromptAPI::kUp:
             if (event.prompt.eventID == 1) {
                 GlobalControl::MovesetChangesOpen = false;
                 SkyPromptAPI::RemovePrompt(MovesetChangesSink::GetSingleton(), GlobalControl::g_clientID);
-                if (SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID)) {
-                }
-                if (!SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), GlobalControl::g_clientID)) {
-                    logger::error("Skyprompt didnt worked Moveset Sink");
-                }
+                SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), GlobalControl::g_clientID);
             }
             logger::info("kUp aceito");
             break;
@@ -510,7 +540,7 @@ RE::BSEventNotifyControl GlobalControl::CameraChange::ProcessEvent(const SKSE::C
         SkyPromptAPI::RemovePrompt(MovesetChangesSink::GetSingleton(), g_clientID);
         //logger::info("me retorna aqui vei");
     }
-    if (RE::PlayerCamera::GetSingleton()->IsInThirdPerson() && g_isWeaponDrawn && !Cycleopen) {
+    if (ShouldShowPrompts() && !Cycleopen) {
         Cycleopen = true;
         SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
         SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
@@ -522,34 +552,26 @@ RE::BSEventNotifyControl GlobalControl::CameraChange::ProcessEvent(const SKSE::C
 
 RE::BSEventNotifyControl GlobalControl::ActionEventHandler::ProcessEvent(const SKSE::ActionEvent* a_event,
                                                                          RE::BSTEventSource<SKSE::ActionEvent>*) {
-  
-    // REQUERIMENTO 1, 2, 3: Pegar todas as informações necessárias
-    std::string category = GetCurrentWeaponCategoryName();
-    // O índice do cache é 0-3, mas a stance no jogo é 1-4.
-    [[maybe_unused]] int stanceIndex = g_currentStance - 1;
-    //int maxMovesets = AnimationManager::GetMaxMovesetsFor(category, stanceIndex);
+ 
 
-    if (a_event && a_event->actor && a_event->actor->IsPlayerRef()) {
+    if (a_event->actor->IsPlayerRef()) {
         // Jogador comeou a sacar a arma
-        if (a_event->type == SKSE::ActionEvent::Type::kBeginDraw &&
-            RE::PlayerCamera::GetSingleton()->IsInThirdPerson()) {
+        if (a_event->type == SKSE::ActionEvent::Type::kBeginDraw) {
             SKSE::log::info("Arma sacada, mostrando o menu.");
             g_isWeaponDrawn = true;  // Define nosso controle como verdadeiro
-            Cycleopen = true;
             // Envia os prompts para a API, fazendo o menu aparecer
             UpdatePowerAttackGlobals();
             UpdateSkyPromptTexts();
-            SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
-            SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+            if (ShouldShowPrompts()) {
+                Cycleopen = true;
+                SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+            } else
+                {
+                SKSE::log::info("ta dando ruim");
+            }
+        
         }
-        if (a_event->type == SKSE::ActionEvent::Type::kBeginDraw) {
-            SKSE::log::info("Arma sacada, mostrando o menu.");
-            UpdatePowerAttackGlobals();
-            UpdateSkyPromptTexts();
-            g_isWeaponDrawn = true;  // Define nosso controle como verdadeiro
-
-        }
-        // Jogador terminou de guardar a arma
         else if (a_event->type == SKSE::ActionEvent::Type::kEndSheathe) {
             //SKSE::log::info("Arma guardada, escondendo o menu.");
             g_isWeaponDrawn = false;  // Define nosso controle como falso
@@ -610,17 +632,24 @@ void GlobalControl::TriggerSmartRandomNumber([[maybe_unused]] const std::string&
     // g_comboState.previousMoveset = g_comboState.lastMoveset;
     // g_comboState.lastMoveset = nextMoveset;
 
-    if (g_isWeaponDrawn && RE::PlayerCamera::GetSingleton()->IsInThirdPerson()) {
+    if (ShouldShowPrompts()) {
+        SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
         SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
     }
 }
 
 bool GlobalControl::IsAnyMenuOpen() { 
     const auto ui = RE::UI::GetSingleton();
+   /* if (!ui->menuStack.empty()) {
+        return true;
+    }*/
+
+    // 2. Verifica menus que precisam do cursor (a maioria dos menus ImGui, como o Wheeler)
+    // Se este contador for maior que 0, algo está forçando o cursor a aparecer.
     for (const auto a_name : blockedMenus) {
-        if (ui->IsMenuOpen(a_name)) {
-            return true;
-        }
+       if (ui->IsMenuOpen(a_name)) {
+        return true;
+       }
     }
     return false;
 }
@@ -636,24 +665,23 @@ RE::BSEventNotifyControl GlobalControl::MenuOpen::ProcessEvent(const RE::MenuOpe
              return RE::BSEventNotifyControl::kContinue;
     }
 
-    // REQUERIMENTO 1, 2, 3: Pegar todas as informações necessárias
-    std::string category = GetCurrentWeaponCategoryName();
-    // O índice do cache é 0-3, mas a stance no jogo é 1-4.
-    int stanceIndex = GlobalControl::g_currentStance - 1;
-    [[maybe_unused]] int maxMovesets = AnimationManager::GetMaxMovesetsFor(category, stanceIndex);
-    if (!IsAnyMenuOpen() && IsThirdPerson() && g_isWeaponDrawn && !Cycleopen) {
-        Cycleopen = true;
-        UpdateSkyPromptTexts();
-        //logger::info("O valor de MovesetText é: {}", MovesetText);
-        SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
-        SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
-    } 
-    if (IsAnyMenuOpen() && IsThirdPerson()) {
-        Cycleopen = false;
-        UpdatePowerAttackGlobals();
-        UpdateSkyPromptTexts();
-        SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
-        SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
+    if (event->opening) {
+        if (Cycleopen) {
+            Cycleopen = false;
+            SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
+            SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
+        }
+    }
+    // Se um menu está FECHANDO
+    else {
+        // Após o fechamento, verificamos se NENHUM outro menu está aberto.
+        // É importante chamar IsAnyMenuOpen() AQUI.
+        if (ShouldShowPrompts() && !Cycleopen) {
+            Cycleopen = true;
+            UpdateSkyPromptTexts();
+            SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
+            SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+        }
     }
     
     return RE::BSEventNotifyControl::kContinue;
@@ -825,40 +853,59 @@ void GlobalControl::NPCrandomNumber(RE::Actor* targetActor, const std::string& e
 
 RE::BSEventNotifyControl GlobalControl::NpcCombatTracker::ProcessEvent(const RE::TESCombatEvent* a_event,
                                                                        RE::BSTEventSource<RE::TESCombatEvent>*) {
-    auto actor = a_event->actor.get();
-    auto targetActor = a_event->targetActor.get();
-    auto newState = a_event->newState;
-    auto* npc = actor->As<RE::Actor>();
-
-
     if (!a_event || !a_event->actor) {
         return RE::BSEventNotifyControl::kContinue;
     }
-    if (actor && actor->IsPlayerRef()) {
-        // Ignorar eventos do jogador
-        return RE::BSEventNotifyControl::kContinue;
-    }
 
-    if (actor) {
+    auto actor = a_event->actor.get();
+    logger::info("Processando evento de combate para ator: {}", actor ? actor->GetName() : "Nulo");
+    auto player = RE::PlayerCharacter::GetSingleton();
+    // --- INÍCIO DA MODIFICAÇÃO ---
+
+    // 1. Lógica específica para o JOGADOR
+    if (a_event->actor->IsPlayerRef()) {
+        // Se a configuração 'OnlyCombat' estiver desligada, não precisamos fazer nada aqui.
+        if (!Settings::OnlyCombat) {
+            return RE::BSEventNotifyControl::kContinue;
+        }
+
         switch (a_event->newState.get()) {
             case RE::ACTOR_COMBAT_STATE::kCombat:
-                SKSE::log::info("{} entrou em combate com {}", actor->GetName(),
-                                targetActor ? targetActor->GetName() : "alvo desconhecido");
-                GlobalControl::NpcCombatTracker::RegisterSink(npc);
-
+                // Jogador ENTROU em combate. Mostra o menu se as condições forem válidas.
+                if (ShouldShowPrompts() && !Cycleopen) {
+                    Cycleopen = true;
+                    SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
+                    SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+                }
                 break;
-            case RE::ACTOR_COMBAT_STATE::kSearching:
-                // O NPC está procurando um alvo
-                // Coloque seu código aqui
+
+            case RE::ACTOR_COMBAT_STATE::kNone:
+                // Jogador SAIU de combate. Esconde o menu.
+                Cycleopen = false;
+                SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::RemovePrompt(StancesChangesSink::GetSingleton(), g_clientID);
+                SkyPromptAPI::RemovePrompt(MovesetChangesSink::GetSingleton(), g_clientID);
+                break;
+        }
+        return RE::BSEventNotifyControl::kContinue;  // Finaliza após tratar o jogador
+    }
+
+    // 2. Lógica existente para NPCs (agora dentro de um else ou após o if do jogador)
+    // O if original que ignorava o jogador foi removido daqui
+    auto* npc = actor->As<RE::Actor>();
+    if (npc) {  // Garante que é um ator válido
+        switch (a_event->newState.get()) {
+            case RE::ACTOR_COMBAT_STATE::kCombat:
+                GlobalControl::NpcCombatTracker::RegisterSink(npc);
                 break;
             case RE::ACTOR_COMBAT_STATE::kNone:
-                SKSE::log::info("{} saiu de combate com {}", actor->GetName(),
-                                targetActor ? targetActor->GetName() : "alvo desconhecido");
                 GlobalControl::NpcCombatTracker::UnregisterSink(npc);
                 break;
         }
     }
 
+    // --- FIM DA MODIFICAÇÃO ---
 
     return RE::BSEventNotifyControl::kContinue;
 }
@@ -937,7 +984,7 @@ void GlobalControl::UpdateSkyPromptTexts() {
     int currentMovesetIndex = g_currentMoveset;  // 1-N
     if (maxMovesets > 0) {
         int dirState = InputListener::GetDirectionalState();
-        SKSE::log::info("[UpdateSkyPromptTexts] Chamando GetCurrentMovesetName com dirState: {}", dirState);
+        //SKSE::log::info("[UpdateSkyPromptTexts] Chamando GetCurrentMovesetName com dirState: {}", dirState);
         std::string currentMovesetName =
             animManager->GetCurrentMovesetName(category, validStanceIndexForMoveset, currentMovesetIndex, dirState);
         MovesetText = std::format("{} ({}/{})", currentMovesetName, currentMovesetIndex, maxMovesets);
@@ -985,6 +1032,9 @@ void GlobalControl::UpdateSkyPromptTexts() {
 }
 
 void GlobalControl::UpdatePowerAttackGlobals() {
+    if (!Settings::bfcoDirectionalAttacks) {
+        return;  // Se a opção não estiver ativa, não faz nada.
+    }
     auto player = RE::PlayerCharacter::GetSingleton();
     if (!player) return;
 
@@ -995,20 +1045,122 @@ void GlobalControl::UpdatePowerAttackGlobals() {
     // --- ALTERAÇÃO PRINCIPAL AQUI ---
     // 1. O tipo da variável "tags" agora precisa do escopo da classe.
     // 2. A função é chamada através do singleton do AnimationManager.
-    AnimationManager::MovesetTags tags = AnimationManager::GetSingleton()->GetCurrentMovesetTags(category, stanceIndex, movesetIndex);
+    MovesetTags tags = AnimationManager::GetSingleton()->GetCurrentMovesetTags(category, stanceIndex, movesetIndex);
     // --- FIM DA ALTERAÇÃO ---
+    int directionalState = 0;
+    if (bool success = player->GetGraphVariableInt("DirecionalCycleMoveset", directionalState); success) {
+        // SUCESSO! A chamada funcionou.
+        // 'directionalState' agora tem o "valor que veio da graphvalue".
+        // Use a variável aqui.
+        //SKSE::log::info("Valor obtido com sucesso: {}", directionalState);
 
+    } else {
+        // FALHA! A chamada não funcionou.
+        // Lide com o erro aqui. A variável 'directionalState' não foi alterada.
+        SKSE::log::warn("Não foi possível obter o valor de 'DirecionalCycleMoveset'.");
+    }
+    bool isDpaAvailableForCurrentDirection = false;
+    switch (directionalState) {
+        case 1:  // Frente
+            isDpaAvailableForCurrentDirection = tags.dpaTags.hasA;
+            break;
+        case 5:  // Trás
+            isDpaAvailableForCurrentDirection = tags.dpaTags.hasB;
+            break;
+        case 7:  // Esquerda
+            isDpaAvailableForCurrentDirection = tags.dpaTags.hasL;
+            break;
+        case 3:  // Direita
+            isDpaAvailableForCurrentDirection = tags.dpaTags.hasR;
+            break;
+        // Para todas as outras direções (diagonais, parado), o valor será false.
+        default:
+            isDpaAvailableForCurrentDirection = false;
+            break;
+    }
     const auto tesDataHandler = RE::TESDataHandler::GetSingleton();
+
     if (tesDataHandler) {
-        RE::TESGlobal* bfcoDPA_Global = tesDataHandler->LookupForm<RE::TESGlobal>(0x807, "SCSI-ACTbfco-Main.esp");
+       RE::TESGlobal* bfcoDPA_Global = tesDataHandler->LookupForm<RE::TESGlobal>(0x84E, "SCSI-ACTbfco-Main.esp");
+
         if (bfcoDPA_Global) {
-            bfcoDPA_Global->value = tags.hasDPA ? 1.0f : 0.0f;
-            SKSE::log::info("[UpdatePowerAttack] Global 'bfcoTG_DirPowerAttack' set to {}", bfcoDPA_Global->value);
-        } else {
-            SKSE::log::warn("[UpdatePowerAttack] Global 'bfcoTG_DirPowerAttack' não encontrado.");
+         bfcoDPA_Global->value = isDpaAvailableForCurrentDirection ? 1.0f : 0.0f;
+
+         //SKSE::log::info("[UpdatePowerAttack] Global 'bfcoTG_DirPowerAttack' set to {}",bfcoDPA_Global->value);
+        }
+        else {
+          //SKSE::log::warn("[UpdatePowerAttack] Global 'bfcoTG_DirPowerAttack' não encontrado.");
+
         }
     }
 
     player->SetGraphVariableBool("BFCO_HasCombo", tags.hasCPA);
-    SKSE::log::info("[UpdatePowerAttack] GraphVar 'BFCO_HasCombo' set to {}", tags.hasCPA);
+    //SKSE::log::info("[UpdatePowerAttack] GraphVar 'BFCO_HasCombo' set to {}", tags.hasCPA);
+}
+
+bool GlobalControl::ShouldShowPrompts() {
+    auto* player = RE::PlayerCharacter::GetSingleton();
+    if (!player) {
+        return false;
+    }
+
+    // --- Início da Seção de Depuração ---
+
+    // 1. Avalia cada condição individualmente e armazena em uma variável
+    bool settingOnlyCombat = Settings::OnlyCombat;
+    bool playerInCombat = player->IsInCombat();
+    bool combatConditionMet = !settingOnlyCombat || playerInCombat;
+
+    bool weaponDrawn = g_isWeaponDrawn;
+    bool thirdPerson = IsThirdPerson();
+    bool noMenusOpen = !IsAnyMenuOpen();  
+
+    // 2. Imprime o status de cada condição no log
+    // Use logger::info ou logger::debug, dependendo de como seu log está configurado
+    /*logger::info("--- [Debug ShouldShowPrompts] ---");
+    logger::info("1. Condição de Combate:");
+    logger::info("   - Settings::OnlyCombat = {}", settingOnlyCombat);
+    logger::info("   - player->IsInCombat() = {}", playerInCombat);
+    logger::info("   -> combatConditionMet   = {}", combatConditionMet);
+    logger::info("---------------------------------");
+    logger::info("2. Outras Condições:");
+    logger::info("   - g_isWeaponDrawn      = {}", weaponDrawn);
+    logger::info("   - IsThirdPerson()      = {}", thirdPerson);
+    logger::info("   - !IsAnyMenuOpen()     = {}", noMenusOpen);
+    logger::info("---------------------------------");*/
+
+    // 3. Calcula o resultado final
+    bool finalResult = weaponDrawn && thirdPerson && noMenusOpen && combatConditionMet;
+
+    /*logger::info("==> RESULTADO FINAL: {}", finalResult);
+    logger::info("--- [Fim do Debug] ---");*/
+
+    // --- Fim da Seção de Depuração ---
+
+    return finalResult;
+}
+
+void GlobalControl::UpdatePromptVisibility() {
+    bool shouldBeVisible = ShouldShowPrompts();
+
+    // A variável 'Cycleopen' rastreia se os prompts JÁ ESTÃO visíveis.
+
+    if (shouldBeVisible && !Cycleopen) {
+        // CONDIÇÃO: Deveriam estar visíveis, mas não estão -> MOSTRAR
+        logger::info("[UpdatePromptVisibility] Condições atendidas. Mostrando prompts.");
+        Cycleopen = true;
+        // Talvez seja necessário atualizar os textos antes de enviar
+        UpdateSkyPromptTexts();
+        SkyPromptAPI::SendPrompt(StancesSink::GetSingleton(), g_clientID);
+        SkyPromptAPI::SendPrompt(MovesetSink::GetSingleton(), g_clientID);
+
+    } else if (!shouldBeVisible && Cycleopen) {
+        // CONDIÇÃO: Não deveriam estar visíveis, mas estão -> ESCONDER
+        logger::info("[UpdatePromptVisibility] Condições não atendidas. Escondendo prompts.");
+        Cycleopen = false;
+        SkyPromptAPI::RemovePrompt(StancesSink::GetSingleton(), g_clientID);
+        SkyPromptAPI::RemovePrompt(MovesetSink::GetSingleton(), g_clientID);
+        SkyPromptAPI::RemovePrompt(StancesChangesSink::GetSingleton(), g_clientID);
+        SkyPromptAPI::RemovePrompt(MovesetChangesSink::GetSingleton(), g_clientID);
+    }
 }
